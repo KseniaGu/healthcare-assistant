@@ -43,7 +43,7 @@ folder:
 - Create a `models_cache` folder in the root of the project.
 - Copy local HuggingFace hub files into it: `cp -r ~/.cache/huggingface/* ./models_cache/`
 
-Environment variables should be configured in the .env file (in the root directory) – see the `.env.example` file for
+Environment variables should be configured in the `.env` file (in the root directory) – see the `.env.example` file for
 details.
 
 To manage Alembic migrations, create an `alembic.ini` file (in the root directory). For more details, please refer to
