@@ -1,0 +1,95 @@
+_meta:
+  version: "1.0"
+  description: "Lab blood test results extractor prompt template."
+  model_settings:
+    model: "gemini-2.5-flash-lite"
+    temperature: 0.0
+    max_output_tokens: 1200
+    response_mime_type: "application/json"
+
+system:
+  system_instruction: |
+    You are a precise medical-data extractor. Always produce exactly the JSON object requested (no extra text).
+    If any field cannot be extracted, return null for that field. Do NOT explain, do NOT add commentary,
+    and do NOT include any text before or after the JSON.
+
+  response_json_schema:
+    title: "Blood test results schema"
+    description: "Top-level schema for extracted lab results."
+    type: "object"
+    properties:
+      date:
+        anyOf:
+          - type: "string"
+            format: "date"
+          - type: "null"
+        title: "Date the blood test was performed (ISO 8601 format)"
+      results:
+        type: "array"
+        title: "List of extracted lab result items"
+        items:
+          type: "object"
+          title: "Result Item"
+          properties:
+            test_name:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: "Standardized test name"
+            value:
+              anyOf:
+                - type: "number"
+                - type: "null"
+              title: "Parsed numeric value (float)"
+            value_min:
+              anyOf:
+                - type: "number"
+                - type: "null"
+              title: "Range lower bound if input was a range"
+            value_max:
+              anyOf:
+                - type: "number"
+                - type: "null"
+              title: "Range upper bound if input was a range"
+            inequality:
+              anyOf:
+                - enum: ["<", ">"]
+                - type: "null"
+              title: "Inequality sign if present"
+            units:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: "Raw units text (if present)"
+            reference_range:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: "Reference range string as found in the text"
+            flag:
+              type: "string"
+              enum: ["Normal", "High", "Low", "Unknown"]
+              title: "Interpretation flag computed from value and reference_range"
+            units_normalized:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: 'Normalized units (e.g., "g/dL", "mg/dL", "μmol/L")'
+          required:
+            - test_name
+            - value
+            - reference_range
+      errors:
+        type: "array"
+        title: "Extraction errors / warnings"
+        items:
+          type: "string"
+    required:
+      - date
+      - results
+
+user: |
+  Extract data from this medical report:
+  """
+  {{ input_text }}
+  """

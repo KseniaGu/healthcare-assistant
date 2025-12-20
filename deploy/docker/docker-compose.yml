@@ -1,0 +1,46 @@
+services:
+  database:
+    image: postgres:16.11-alpine
+    restart: always
+    env_file:
+      - ../../.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DATABASE_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USERNAME} -d ${POSTGRES_DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DATABASE_NAME}
+      HF_HOME: /app/models_cache
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - app_network
+    volumes:
+      - ../../models_cache:/app/models_cache
+
+volumes:
+  postgres_data:
+
+networks:
+  app_network:
+    driver: bridge
