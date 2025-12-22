@@ -87,7 +87,7 @@ class GeminiClient(LLMClient):
         return usage_metadata
 
     def save_output(self, output: str, prompt_type: PromptTypeEnum, prompt_version: str) -> Path:
-        prompt_llm_outputs_dir = self.path_settings.LLM_OUTPUTS_DIR / str(prompt_type.value) / prompt_version
+        prompt_llm_outputs_dir = self.path_settings.llm_outputs_dir / str(prompt_type.value) / prompt_version
         if os.path.exists(prompt_llm_outputs_dir):
             current_prompt_outputs = os.listdir(prompt_llm_outputs_dir)
             output_path = prompt_llm_outputs_dir / f"{len(current_prompt_outputs)}.txt"

@@ -54,7 +54,7 @@ class LaboratoryTestProcessor:
         self.document_parser = LlamaParseClient(self.model_settings.document_parser)
 
         # Parsed data processing
-        self.prompt_engine = PromptEngine(self.path_settings.PROMPTS_DIR)
+        self.prompt_engine = PromptEngine(self.path_settings.prompts_dir)
         self.data_processor = GeminiClient(self.model_settings.data_processor, self.path_settings)
 
         # Logging
@@ -387,7 +387,7 @@ class LaboratoryTestProcessor:
         """Makes document anonymization process."""
         file_extension = input_path.suffix
         anonymized_output_file = input_path.name.replace(file_extension, f"_anonymized{file_extension}")
-        anonymized_output_path = self.path_settings.ANONYMIZED_DOCUMENTS_DIR / anonymized_output_file
+        anonymized_output_path = self.path_settings.anonymized_documents_dir / anonymized_output_file
 
         # Add source file artifact and check for uniqueness
         artifact_metadata = generate_artifact_meta(
@@ -457,7 +457,7 @@ class LaboratoryTestProcessor:
 
             # Parse anonymized documents to extract the medical data in a proper text format
             parsed_output_file = input_path.name.replace(file_extension, "_parsed.txt")
-            parsed_output_path = self.path_settings.PARSED_DOCUMENTS_DIR / parsed_output_file
+            parsed_output_path = self.path_settings.parsed_documents_dir / parsed_output_file
             step_data = await loop.run_in_executor(
                 None, partial(self.parse_document, pipeline_context.anonymized_path, parsed_output_path)
             )
@@ -467,7 +467,7 @@ class LaboratoryTestProcessor:
 
             # Process parsed text using LLM to get structured output
             processed_output_file = input_path.name.replace(file_extension, "_processed.json")
-            processed_output_path = self.path_settings.PROCESSED_DOCUMENTS_DIR / processed_output_file
+            processed_output_path = self.path_settings.processed_documents_dir / processed_output_file
             step_data, structured_output = await loop.run_in_executor(
                 None, partial(self.process_data, parsed_output_path, processed_output_path, processor_model_name)
             )
@@ -502,7 +502,7 @@ async def main():
     database_settings = PostgreSQLSettings()
     LTP = LaboratoryTestProcessor(model_config, data_config, path_settings, database_settings)
     patient_id = await LTP.database.get_patient("base_patient__seed__90ba650e5a6c")
-    context = await LTP.anonymize(path_settings.RAW_DOCUMENTS / "837453519.pdf", patient_id)
+    context = await LTP.anonymize(path_settings.raw_documents_dir / "837453519.pdf", patient_id)
     await LTP.run(context)
     LTP.logger.shutdown()
 
