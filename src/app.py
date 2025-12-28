@@ -13,6 +13,7 @@ if project_root not in sys.path:
 
 from backend.utils.common_funcs import write_temp_file
 from backend.data_processing.laboratory_test import LaboratoryTestProcessor, local_logger, memory_handler
+from configs.constants import BASE_PATIENT_NAME
 from configs.data import DataSettings
 from configs.database import PostgreSQLSettings
 from configs.models import ModelSettings
@@ -45,7 +46,7 @@ def get_processor():
     processor = LaboratoryTestProcessor(
         ModelSettings(), DataSettings(), PathSettings(), PostgreSQLSettings()
     )
-    patient_id = asyncio.run(processor.database.get_patient("base_patient__seed__90ba650e5a6c"))
+    patient_id = asyncio.run(processor.database.get_patient(BASE_PATIENT_NAME))
     return processor, patient_id
 
 
@@ -172,38 +173,56 @@ elif page == "Lab Test Dynamics":
             data.append({
                 "Test": obs.test_name,
                 "Value": obs.observed_value,
-                "Unit": obs.unit or "",
-                "Date": obs.observation_date or obs.created_at,
+                "Date": (obs.observation_date or obs.created_at).date(),
                 "Flag": obs.flag.value if obs.flag else "NORMAL"
             })
         dataframe = pd.DataFrame(data)
-        dataframe['Date'] = pd.to_datetime(dataframe['Date'])
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Records", len(dataframe))
-        m2.metric("Critical Flags", len(dataframe[dataframe["Flag"] != "NORMAL"]), delta_color="inverse")
-        m3.metric("Latest Visit", dataframe["Date"].max().strftime('%Y-%m-%d'))
-
-        st.divider()
         col_filter, col_chart = st.columns([1, 3])
 
         with col_filter:
             st.write("### Filter Analysis")
-            all_tests = dataframe["Test"].unique()
-            selected = st.multiselect("Select Tests", all_tests, default=all_tests[:2])
 
-        with col_chart:
-            if selected:
-                f_df = dataframe[dataframe["Test"].isin(selected)].sort_values("Date")
-                fig = px.line(
-                    f_df, x="Date", y="Value", color="Test",
-                    markers=True, template="plotly_white",
-                    title="Biomarker Progression"
-                )
-                fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig, use_container_width=True)
+            date_range = st.date_input(
+                "Select Date Range",
+                value=(dataframe["Date"].min(), dataframe["Date"].max()),
+                key="dynamics_page_date_range"
+            )
 
-        # Data Explorer
+            if isinstance(date_range, tuple) and len(date_range) == 2:
+                start, end = date_range
+                available_tests = dataframe[dataframe["Date"].between(start, end)]["Test"].unique()
+            else:
+                available_tests = []
+
+            selected_tests = st.multiselect(
+                "Select Tests",
+                options=sorted(available_tests),
+                key="dynamics_page_test_select"
+            )
+
+            # Final filtered dataset
+            if len(available_tests) > 0 and selected_tests:
+                mask = (dataframe["Date"].between(start, end)) & (dataframe["Test"].isin(selected_tests))
+                f_df = dataframe[mask].sort_values("Date")
+
+                with col_chart:
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Data Points", len(f_df))
+                    m2.metric("Critical Flags", len(f_df[f_df["Flag"] != "NORMAL"]))
+                    m3.metric("Latest Visit", f_df["Date"].max().strftime('%Y-%m-%d'))
+
+                    fig = px.line(
+                        f_df, x="Date", y="Value", color="Test",
+                        markers=True, template="plotly_white",
+                        title="Biomarker Progression"
+                    )
+                    fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                with col_chart:
+                    st.info("No laboratory tests match the selected date criteria.")
+
         with st.expander("🔍 Clinical Data Grid"):
             st.dataframe(dataframe.sort_values("Date", ascending=False), use_container_width=True)
 
