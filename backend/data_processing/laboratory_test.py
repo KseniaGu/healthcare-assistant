@@ -5,6 +5,7 @@ from datetime import timezone
 from functools import partial
 
 import fitz
+import ftfy
 from dotenv import load_dotenv, find_dotenv
 from gliner import GLiNER
 from langfuse import observe, get_client
@@ -15,7 +16,8 @@ from backend.models.llm_clients.gemini import GeminiClient
 from backend.models.llm_clients.llama_parse import LlamaParseClient
 from backend.utils.common_funcs import write_file, read_file, get_logger
 from backend.utils.exceptions import *
-from backend.utils.helpers import generate_artifact_meta, get_hash_and_size
+from backend.utils.helpers import generate_artifact_meta, get_hash_and_size, is_valid_text, process_test_value, \
+    clean_json_markdown
 from backend.utils.prompt_engine import PromptEngine
 from backend.utils.schemas import *
 from configs.constants import GLINER_MAX_WINDOW_SIZE, GLINER_TOKENS_OVERLAP, DEFAULT_LAB_TEST_NAME, \
@@ -150,10 +152,25 @@ class LaboratoryTestProcessor:
 
             for page in document:
                 text = page.get_text()
-                chunks = self.get_text_chunks(text)
-                images = page.get_image_info()
 
+                images = page.get_image_info()
                 self.mask_images(images, page)
+
+                # TODO: Add OCR pipeline for broken/incorrectly formatted PDFs
+                if not is_valid_text(text, common_words=self.data_settings.common_words):
+                    message = "Text extracted from the document page is not valid. Trying to fix..."
+                    local_logger.warning(message)
+                    self.logger.update_current_span(level="WARNING", status_message=message)
+                    text = ftfy.fix_text(text)
+
+                    if not is_valid_text(text, common_words=self.data_settings.common_words):
+                        page.apply_redactions()
+                        message = "Text extracted from the document page is not valid."
+                        local_logger.error(message)
+                        self.logger.update_current_span(level="ERROR", status_message=message)
+                        continue
+
+                chunks = self.get_text_chunks(text)
                 pii_found |= self.mask_entities(chunks, page)
 
                 page.apply_redactions()
@@ -192,8 +209,7 @@ class LaboratoryTestProcessor:
             return None
 
         try:
-            documents = self.document_parser.parse(input_path)
-            text_content = "\n".join([doc.text for doc in documents])
+            text_content = self.document_parser.parse(input_path)
             if not text_content.strip("\n "):
                 raise DocumentParsingError(f"Parsed empty document. Input path: {input_path}")
 
@@ -258,7 +274,7 @@ class LaboratoryTestProcessor:
                 model_output, usage_metadata, raw_output_path = self.data_processor.generate(
                     prompt, prompt_type, prompt_version, **system_prompt, model_name=model_name
                 )
-                structured_output = json.loads(model_output.replace("```", "").replace("json", ""))
+                structured_output = json.loads(clean_json_markdown(model_output))
                 write_file(structured_output, output_path)
             except Exception as e:
                 raise LaboratoryTestProcessingError(
@@ -363,12 +379,15 @@ class LaboratoryTestProcessor:
                     preferred_unit=result.get("units_normalized")
                 )
                 test_catalog_id = await self.database.get_test_catalog_id(test_catalog_data)
+                test_value, inequality = process_test_value(result.get("value"), self.data_settings.common_inequalities)
+
                 test_observation = TestObservationSchema(
                     test_catalog_id=test_catalog_id,
                     report_id=report.id,
                     patient_id=patient_id,
                     test_name=test_name,
-                    observed_value=result.get("value"),
+                    observed_value=test_value,
+                    observed_value_inequality=inequality,
                     unit=result.get("units"),
                     flag=TestFlagTypeEnum[result.get("flag", "").lower()].name,
                     reference_range=result.get("reference_range"),
@@ -496,13 +515,14 @@ class LaboratoryTestProcessor:
 
 
 async def main():
+    from configs.constants import BASE_PATIENT_NAME
     model_config = ModelSettings()
     data_config = DataSettings()
     path_settings = PathSettings()
     database_settings = PostgreSQLSettings()
     LTP = LaboratoryTestProcessor(model_config, data_config, path_settings, database_settings)
-    patient_id = await LTP.database.get_patient("base_patient__seed__90ba650e5a6c")
-    context = await LTP.anonymize(path_settings.raw_documents_dir / "837453519.pdf", patient_id)
+    patient_id = await LTP.database.get_patient(BASE_PATIENT_NAME)
+    context = await LTP.anonymize(path_settings.raw_documents_dir / "test_patient.pdf", patient_id)
     await LTP.run(context)
     LTP.logger.shutdown()
 

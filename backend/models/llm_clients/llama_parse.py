@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Any
 
 from llama_parse import LlamaParse
 from llama_parse.base import ResultType
@@ -40,7 +39,7 @@ class LlamaParseClient:
             local_logger.error(f"Error initializing LlamaParse client: {e}")
             self.client = None
 
-    def parse(self, file_path: Path, **kwargs) -> list[Any]:
+    def parse(self, file_path: Path, **kwargs) -> str:
         """Parses a document file using the LlamaParse service.
 
         Args:
@@ -48,11 +47,11 @@ class LlamaParseClient:
             **kwargs: Additional arguments to pass to the parser.
 
         Returns:
-            A list of document objects containing the parsed content.
+            The document's parsed content.
         """
         try:
             documents = self.client.load_data(file_path, **kwargs)
-            return documents
+            return "\n".join([doc.text for doc in documents])
         except Exception as e:
             local_logger.error(f"Failed to parse document {file_path}. Error: {e}")
-            return []
+            return ""

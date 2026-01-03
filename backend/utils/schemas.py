@@ -32,6 +32,7 @@ class PipelineSchema(BaseModel):
     task: str
     status: str
 
+
 class PipelineStepSchema(BaseModel):
     """Schema for pipeline step information.
 
@@ -105,6 +106,7 @@ class TestObservationSchema(BaseModel):
     test_catalog_id: Optional[int] = None
     test_name: Optional[str] = None
     observed_value: Optional[float] = None
+    observed_value_inequality: Optional[str] = None
     unit: Optional[str] = None
     flag: Optional[str] = None
     reference_range: Optional[str] = None

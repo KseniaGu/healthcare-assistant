@@ -15,6 +15,7 @@ class TestFlagTypeEnum(StrEnum):
     low = "low"
     high = "high"
     normal = "normal"
+    unknown = "unknown"
 
 
 class ToolNameEnum(StrEnum):

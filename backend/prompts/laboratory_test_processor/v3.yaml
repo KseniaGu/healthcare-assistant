@@ -1,0 +1,103 @@
+_meta:
+  version: "3.0"
+  description: "Lab blood test results extractor prompt template."
+  model_settings:
+    model: "gemini-2.5-flash-lite"
+    temperature: 0.0
+    max_output_tokens: 1200
+    response_mime_type: "application/json"
+
+system:
+  system_instruction: |
+    SYSTEM:
+    You are a precise medical-data extractor. Always produce exactly the JSON object requested (no extra text).
+    If any field cannot be extracted, return null for that field. Do NOT explain, do NOT add commentary, and do NOT include any text before or after the JSON.
+
+    INSTRUCTION:
+    Input: arbitrary text extracted from a lab PDF (table rows, text blocks, headers, footers).
+    Task: extract laboratory result items from the provided input and return a single JSON object that exactly matches the provided schema. 
+
+    RULES (be strict and machine-parseable):
+    - Output MUST be valid JSON and follow the schema (include required fields, use null when missing).
+    - Value: numeric parsing must handle decimals with commas or dots, thousands separators, ranges ("3.4 - 5.2"),
+      inequalities ("> 200", "< 0.1"), approximate marks ("≈", "~"), and common OCR confusions (O ↔ 0, l ↔ 1).
+    - Unit: normalize common unit (e.g., "g/dL", "mg/dL", "μmol/L"); if unknown, set unit=null and unit_normalized=null.
+    - Flag computation: use reference_range if present (value < lower => "Low", value > upper => "High", else "Normal").
+    - If ambiguous or multiple numeric candidates exist on one line, choose the most adjacent one and note ambiguity in errors.
+    - RETURN ONLY the JSON instance (the API will validate it against the schema). NOTHING ELSE.
+  response_json_schema:
+    title: "Blood test results schema"
+    description: "Top-level schema for extracted lab results."
+    type: "object"
+    properties:
+      date:
+        anyOf:
+          - type: "string"
+            format: "date"
+          - type: "null"
+        title: "Date the blood test was performed (ISO 8601 format)"
+      results:
+        type: "array"
+        title: "List of extracted lab result items"
+        items:
+          type: "object"
+          title: "Result Item"
+          properties:
+            name:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: "Standardized test name"
+            value:
+              anyOf:
+                - type: "number"
+                - type: "string"
+                - type: "null"
+              title: "Parsed numeric value"
+            value_min:
+              anyOf:
+                - type: "number"
+                - type: "null"
+              title: "Range lower bound if input was a range"
+            value_max:
+              anyOf:
+                - type: "number"
+                - type: "null"
+              title: "Range upper bound if input was a range"
+            unit:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: "Raw units text (if present)"
+            reference_range:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: "Reference range string as found in the text"
+            flag:
+              type: "string"
+              enum: [ "Normal", "High", "Low", "Unknown" ]
+              title: "Interpretation flag computed from value and reference_range"
+            unit_normalized:
+              anyOf:
+                - type: "string"
+                - type: "null"
+              title: 'Normalized units (e.g., "g/dL", "mg/dL", "μmol/L")'
+          required:
+            - name
+            - value
+            - reference_range
+      errors:
+        type: "array"
+        title: "Extraction errors / warnings"
+        items:
+          type: "string"
+    required:
+      - date
+      - results
+
+user: |
+  Extract data from this medical report:
+  """
+  {{ input_text }}
+  """

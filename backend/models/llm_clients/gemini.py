@@ -106,7 +106,7 @@ class GeminiClient(LLMClient):
             system_instruction: str = None,
             response_json_schema: dict = None,
             model_name: str = None
-    ) -> (str, Path):
+    ) -> (str | dict, dict, Path):
         """Executes the Gemini API call."""
         model_name = model_name if model_name is not None else self.config.model_name
         if system_instruction is not None:

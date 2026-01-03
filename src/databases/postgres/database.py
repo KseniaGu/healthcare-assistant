@@ -69,17 +69,20 @@ class PostgreSQLDB:
         command.upgrade(alembic_cfg, 'head')
 
     @connection
-    async def select_filtered(self, table_obj: type[Base], filters: BaseModel, session: AsyncSession = None):
-        """Executes select query with filters."""
-        filters = filters.model_dump(exclude_unset=True)
-        filters = (getattr(table_obj, key, value) == value for key, value in filters.items())
-        result = await session.execute(select(Artifact).where(*filters))
+    async def select(self, table_obj: type[Base], filters: BaseModel = None, session: AsyncSession = None):
+        """Executes select query with filters (if provided)."""
+        if filters is not None:
+            filters = filters.model_dump(exclude_unset=True)
+            filters = (getattr(table_obj, key, value) == value for key, value in filters.items())
+            result = await session.execute(select(table_obj).where(*filters))
+        else:
+            result = await session.execute(select(table_obj))
         return result.scalars()
 
     @connection
     async def get_pipeline(self, pipeline_data: PipelineSchema, session: AsyncSession = None) -> Pipeline.id | None:
         """Gets pipeline by the given attributes."""
-        result = await self.select_filtered(Pipeline, pipeline_data)
+        result = await self.select(Pipeline, pipeline_data)
         result = result.first()
         if result:
             return result.id
@@ -134,7 +137,7 @@ class PostgreSQLDB:
     @connection
     async def get_artifact(self, artifact_data: ArtifactSchema, session: AsyncSession = None) -> Artifact.id | None:
         """Gets artifact by the given attributes."""
-        result = await self.select_filtered(Artifact, artifact_data)
+        result = await self.select(Artifact, artifact_data)
         result = result.first()
         if result:
             return result.id
@@ -180,7 +183,7 @@ class PostgreSQLDB:
             session: AsyncSession = None
     ) -> (Report.raw_json | None, Report.pipeline_run_id | None):
         """Gets report and its pipeline run id given report data."""
-        result = await self.select_filtered(Report, report_data)
+        result = await self.select(Report, report_data)
         result = result.first()
         if result:
             return result.raw_json, result.pipeline_run_id
@@ -195,7 +198,7 @@ class PostgreSQLDB:
     ) -> TestCatalog.id | None:
         """Gets test catalog id. If no test found and <to_add> is True, adds new test."""
         # TODO: Make test name unification
-        result = await self.select_filtered(TestCatalog, test_data)
+        result = await self.select(TestCatalog, test_data)
         result = result.first()
         if result:
             return result.id

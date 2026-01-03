@@ -1,7 +1,10 @@
 import hashlib
 import mimetypes
 import os
+import re
 import tempfile
+
+from langdetect import detect_langs, LangDetectException
 
 from backend.utils.schemas import *
 
@@ -105,3 +108,50 @@ def generate_artifact_meta(
                 os.remove(tmp_path)
             except Exception:
                 pass
+
+
+def clean_json_markdown(text: str) -> str:
+    """Removes Markdown code blocks."""
+    # Remove `json at start and ``` at end, handling newlines
+    pattern = r"^`{3}(?:json)?\s*(.*?)\s*`{3}$"
+    match = re.search(pattern, text.strip(), re.DOTALL)
+    if match:
+        return match.group(1)
+    return text.strip()
+
+
+def is_valid_text(text: str, confidence_threshold: float = 0.8, common_words: set = ()) -> bool:
+    """Returns True if the provided text is in a natural language and False if it is a garbage/encoding error."""
+    if not text or len(text.strip()) < 3:
+        return False
+
+    # First, run statistical stopword check
+    words = set(re.findall(r'\b[а-яё]{1,10}\b', text.lower()))
+    intersection = words.intersection(common_words)
+
+    # Calculate ratio: if text is long, we expect at least a few common words
+    if len(text) > 50 and len(intersection) == 0:
+        return False
+
+    # Second, try algorithmic detection
+    try:
+        langs = detect_langs(text)
+        for language in langs:
+            if language.lang == 'ru' and language.prob >= confidence_threshold:
+                return True
+        return False
+
+    except LangDetectException:
+        return False
+
+
+def process_test_value(test_value: str, common_inequalities: tuple) -> (float, str):
+    """Extracts inequality from the observed test value if presented."""
+    if any(inequality in test_value for inequality in common_inequalities):
+        value = re.findall("\d+\.*\d*", test_value)
+        if value:
+            inequality = test_value.replace(value[0], "").strip()
+            return float(value[0]), inequality
+        else:
+            raise ValueError("Test value is not numeric.")
+    return float(test_value), ""

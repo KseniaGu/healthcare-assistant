@@ -17,7 +17,7 @@ class PromptEngine:
 
         Args:
             prompt_type: The prompt type = feature to render (e.g. "laboratory_test_processor").
-            version: The version of the feature (e.g. "v1").
+            version: The version of the prompt (e.g. "v1").
             **kwargs: Additional keyword arguments to pass to the template.
 
         Returns:

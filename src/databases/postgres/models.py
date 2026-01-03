@@ -112,6 +112,7 @@ class TestObservation(Base):
 
     test_name: Mapped[Optional[str]] = mapped_column(String(256), index=True, nullable=True)
     observed_value: Mapped[Optional[float]] = mapped_column(nullable=True)
+    observed_value_inequality: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
     unit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     flag: Mapped[Optional[TestFlagTypeEnum]] = mapped_column(
         Enum(TestFlagTypeEnum, name="test_flag_type_enum"), nullable=True,
