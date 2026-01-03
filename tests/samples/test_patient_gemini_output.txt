@@ -1,0 +1,76 @@
+```json
+[
+  {
+    "name": "Железо",
+    "value": "18.8",
+    "unit": "мкмоль/л",
+    "unit_normalized": "umol/L",
+    "reference_range": "9 - 30.4",
+    "reference_range_normalized": [
+      9.0,
+      30.4
+    ],
+    "flag": "Normal"
+  },
+  {
+    "name": "Ферритин",
+    "value": "21",
+    "unit": "мкг/л",
+    "unit_normalized": "ug/L",
+    "reference_range": "15 - 204",
+    "reference_range_normalized": [
+      15.0,
+      204.0
+    ],
+    "flag": "Normal"
+  },
+  {
+    "name": "T3 свободный",
+    "value": "4.35",
+    "unit": "пмоль/л",
+    "unit_normalized": "pmol/L",
+    "reference_range": "3 - 5.6",
+    "reference_range_normalized": [
+      3.0,
+      5.6
+    ],
+    "flag": "Normal"
+  },
+  {
+    "name": "Т4 свободный",
+    "value": "12.11",
+    "unit": "пмоль/л",
+    "unit_normalized": "pmol/L",
+    "reference_range": "9 - 19.05",
+    "reference_range_normalized": [
+      9.0,
+      19.05
+    ],
+    "flag": "Normal"
+  },
+  {
+    "name": "АТ-ТГ",
+    "value": "< 3.00",
+    "unit": "МЕ/мл",
+    "unit_normalized": "IU/mL",
+    "reference_range": "<4.11",
+    "reference_range_normalized": [
+      null,
+      4.11
+    ],
+    "flag": "Normal"
+  },
+  {
+    "name": "АТ-ТПО",
+    "value": "< 3.0",
+    "unit": "МЕ/мл",
+    "unit_normalized": "IU/mL",
+    "reference_range": "< 5.6",
+    "reference_range_normalized": [
+      null,
+      5.6
+    ],
+    "flag": "Normal"
+  }
+]
+```

@@ -3,14 +3,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from configs.database import PostgreSQLSettings
 from src.databases.postgres.models import Base
 
 config = context.config
-
-database_settings = PostgreSQLSettings()
-database_url = database_settings.get_connection_url()
-config.set_main_option("sqlalchemy.url", database_url)
 
 fileConfig(config.config_file_name)
 
