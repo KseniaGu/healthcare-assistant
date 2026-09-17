@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import os
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Sequence
+from typing import Sequence
 
 from alembic import command
 from alembic.config import Config
@@ -28,12 +27,6 @@ class PostgreSQLDB:
         self.settings = database_settings
 
         self._init_database()
-
-    @asynccontextmanager
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
-        """Async context manager for database sessions."""
-        async with self.async_session() as session:
-            yield session
 
     def _init_database(self):
         """Initializes database session.

@@ -32,7 +32,6 @@ st.markdown(
     """
     <style>
     .main { background-color: #f8f9fa; }
-    .stMetric { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     div[data-testid="stSidebar"] { background-color: #0e1117; color: white; }
     .stButton>button { width: 100%; border-radius: 5px; }
     </style>
@@ -208,9 +207,9 @@ elif page == "Lab Test Dynamics":
 
                 with col_chart:
                     m1, m2, m3 = st.columns(3)
-                    m1.metric("Data Points", len(f_df))
-                    m2.metric("Critical Flags", len(f_df[f_df["Flag"] != "NORMAL"]))
-                    m3.metric("Latest Visit", f_df["Date"].max().strftime('%Y-%m-%d'))
+                    m1.metric("Data Points", len(f_df), border=True)
+                    m2.metric("Critical Flags", len(f_df[f_df["Flag"] != "NORMAL"]), border=True)
+                    m3.metric("Latest Visit", f_df["Date"].max().strftime('%Y-%m-%d'), border=True)
 
                     fig = px.line(
                         f_df, x="Date", y="Value", color="Test",

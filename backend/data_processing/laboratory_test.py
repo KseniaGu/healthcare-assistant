@@ -2,7 +2,6 @@ import asyncio
 import json
 import os.path
 from datetime import timezone
-from functools import partial
 
 import fitz
 import ftfy
@@ -101,7 +100,7 @@ class LaboratoryTestProcessor:
             if image.get('bbox') is not None:
                 page.add_redact_annot(quad=image['bbox'], text="IMAGE", fill=(0, 0, 0))
 
-    def mask_entities(self, chunks: list[dict], page: fitz.Page) -> bool:
+    def mask_entities(self, chunks: list[dict], page: fitz.Page, textpage: fitz.TextPage | None = None) -> bool:
         """Detects and masks out (with black rectangular) PII entities.
 
         Returns boolean indicating whether PII was found or not.
@@ -125,7 +124,7 @@ class LaboratoryTestProcessor:
 
             for entity in tqdm(entities, desc='Processing found entities...'):
                 sensitive_text, label = entity["text"], entity["label"]
-                areas = page.search_for(sensitive_text)
+                areas = page.search_for(sensitive_text, textpage=textpage)
 
                 for area in areas:
                     page.add_redact_annot(quad=area, text=f"<{label.upper()}>", fill=(0, 0, 0))
@@ -152,11 +151,10 @@ class LaboratoryTestProcessor:
 
             for page in document:
                 text = page.get_text()
+                textpage = None
 
                 images = page.get_image_info()
-                self.mask_images(images, page)
 
-                # TODO: Add OCR pipeline for broken/incorrectly formatted PDFs
                 if not is_valid_text(text, common_words=self.data_settings.common_words):
                     message = "Text extracted from the document page is not valid. Trying to fix..."
                     local_logger.warning(message)
@@ -164,14 +162,28 @@ class LaboratoryTestProcessor:
                     text = ftfy.fix_text(text)
 
                     if not is_valid_text(text, common_words=self.data_settings.common_words):
+                        local_logger.info("Text remains unreadable. Trying local OCR...")
+                        try:
+                            textpage = page.get_textpage_ocr(language="rus+eng", dpi=300, full=True)
+                            text = page.get_text(textpage=textpage)
+                        except Exception as e:
+                            # Preserve the review flow when OCR is unavailable or fails.
+                            text = ""
+                            message = f"Local OCR failed ({type(e).__name__}). Review this page manually."
+                            local_logger.error(message)
+                            self.logger.update_current_span(level="ERROR", status_message=message)
+
+                    if not is_valid_text(text, common_words=self.data_settings.common_words):
+                        self.mask_images(images, page)
                         page.apply_redactions()
                         message = "Text extracted from the document page is not valid."
                         local_logger.error(message)
                         self.logger.update_current_span(level="ERROR", status_message=message)
                         continue
 
+                self.mask_images(images, page)
                 chunks = self.get_text_chunks(text)
-                pii_found |= self.mask_entities(chunks, page)
+                pii_found |= self.mask_entities(chunks, page, textpage=textpage)
 
                 page.apply_redactions()
 
@@ -434,15 +446,14 @@ class LaboratoryTestProcessor:
         pipeline_run_id, pipeline_run_uuid = await self.database.add_pipeline_run(
             patient_id, task=TaskEnum.laboratory_results
         )
-        loop = asyncio.get_running_loop()
 
         observation_args = {"as_type": "span", "name": "LaboratoryTestProcessor.anonymize"}
         with self.logger.start_as_current_observation(**observation_args) as observation:
             observation.update(metadata={"pipeline_run_id_uuid": pipeline_run_uuid})
 
             # Mask out PII
-            step_data = await loop.run_in_executor(
-                None, partial(self.mask_pii, input_path, anonymized_output_path)
+            step_data = await asyncio.to_thread(
+                self.mask_pii, input_path, anonymized_output_path
             )
             output_artifact_id = await self.log_pipeline_step(
                 pipeline_run_id, step_data, storage_type, input_artifact_id, anonymized_output_path,
@@ -463,7 +474,6 @@ class LaboratoryTestProcessor:
 
     async def run(self, pipeline_context: PipelineRunContext, storage_type: str = "local") -> dict:
         """Processes laboratory analysis results."""
-        loop = asyncio.get_running_loop()
         pipeline_run_id = pipeline_context.pipeline_run_id
         output_artifact_id = pipeline_context.anonymized_artifact_id
         input_path = pipeline_context.source_path
@@ -477,8 +487,8 @@ class LaboratoryTestProcessor:
             # Parse anonymized documents to extract the medical data in a proper text format
             parsed_output_file = input_path.name.replace(file_extension, "_parsed.txt")
             parsed_output_path = self.path_settings.parsed_documents_dir / parsed_output_file
-            step_data = await loop.run_in_executor(
-                None, partial(self.parse_document, pipeline_context.anonymized_path, parsed_output_path)
+            step_data = await asyncio.to_thread(
+                self.parse_document, pipeline_context.anonymized_path, parsed_output_path
             )
             output_artifact_id = await self.log_pipeline_step(
                 pipeline_run_id, step_data, storage_type, output_artifact_id, parsed_output_path, StepTypeEnum.parse
@@ -487,8 +497,8 @@ class LaboratoryTestProcessor:
             # Process parsed text using LLM to get structured output
             processed_output_file = input_path.name.replace(file_extension, "_processed.json")
             processed_output_path = self.path_settings.processed_documents_dir / processed_output_file
-            step_data, structured_output = await loop.run_in_executor(
-                None, partial(self.process_data, parsed_output_path, processed_output_path, processor_model_name)
+            step_data, structured_output = await asyncio.to_thread(
+                self.process_data, parsed_output_path, processed_output_path, processor_model_name
             )
             if not structured_output:
                 raise LaboratoryTestProcessingError("The document's structured output is empty")

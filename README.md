@@ -51,6 +51,17 @@ the [documentation](https://alembic.sqlalchemy.org/en/latest/tutorial.html#tutor
 
 --- 
 
+## Local OCR fallback
+
+Unreadable PDF text is retried with local PyMuPDF/Tesseract OCR in Russian and English
+at 300 DPI. OCR coordinates are used to locate PII for redaction. No document data is
+sent to an external OCR service. If OCR fails or remains unreadable, the existing
+manual-review flow still applies. Existing image masking is unchanged: a scanned
+page stored as a single image may be fully masked.
+
+The Docker images install Tesseract and both language packs; rebuild the container
+after updating the Dockerfile.
+
 ## Examples
 
 - Upload the document with laboratory test results.

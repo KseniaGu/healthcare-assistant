@@ -14,6 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-rus \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

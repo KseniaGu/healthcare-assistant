@@ -1,0 +1,45 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sleep infinity
+    working_dir: /workspaces/healthcare-assistant
+    env_file:
+      - ../.env
+    environment:
+      HF_HOME: /home/vscode/.cache/huggingface
+    volumes:
+      - ..:/workspaces/healthcare-assistant:cached
+      # Mask host data without copying its contents into the volume.
+      - type: volume
+        source: dev_data
+        target: /workspaces/healthcare-assistant/data
+        volume:
+          nocopy: true
+      - model_cache:/home/vscode/.cache/huggingface
+      - ${HOME}/.codex-devcontainers/healthcare-assistant:/home/vscode/.codex
+      - ./alembic.ini:/workspaces/healthcare-assistant/alembic.ini:ro
+    depends_on:
+      database:
+        condition: service_healthy
+
+  database:
+    image: postgres:16.11-alpine
+    environment:
+      POSTGRES_USER: healthcare
+      POSTGRES_PASSWORD: healthcare_dev
+      POSTGRES_DB: healthcare_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthcare -d healthcare_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  dev_data:
+  model_cache:
