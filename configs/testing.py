@@ -2,12 +2,12 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from configs.constants import ENV_PATH
-from configs.constants import ROOT_DIR
+from configs.constants import ENV_PATH, ROOT_DIR
 
 
 class TestingSettings(BaseSettings):
     """Tests settings configuration."""
+
     test_database_name: str = "test_db"
     test_user_data_path: Path = ROOT_DIR / "tests/samples/test_patient.pdf"
     test_user_data_anonymized_path: Path = ROOT_DIR / "tests/samples/test_patient_anonymized.pdf"
@@ -23,7 +23,12 @@ class TestingSettings(BaseSettings):
     test_user_observation_values: tuple = ("18\.8", "21", "4\.35", "12\.11", "<\s*3\.*0*", "<\s*3\.*0*")
     test_user_observation_units: tuple = ("мкмоль/л", "мкг/л", "пмоль/л", "пмоль/л", "МЕ/мл", "МЕ/мл")
     test_user_observation_reference_ranges: tuple = (
-        "9\s*\-\s*30\.4", "15\s*-\s*204", "3\s*-\s*5\.6", "9\s*-\s*19\.05", "<\s*4\.11", "<\s*5\.6"
+        "9\s*\-\s*30\.4",
+        "15\s*-\s*204",
+        "3\s*-\s*5\.6",
+        "9\s*-\s*19\.05",
+        "<\s*4\.11",
+        "<\s*5\.6",
     )
 
     model_config = SettingsConfigDict(

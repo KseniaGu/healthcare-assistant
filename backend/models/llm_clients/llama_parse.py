@@ -8,7 +8,6 @@ from configs.models import LlamaParseSettings
 
 
 class LlamaParseClient:
-
     def __init__(self, config: LlamaParseSettings):
         self.config = config
 
@@ -17,9 +16,9 @@ class LlamaParseClient:
 
     def _normalize_parameters(self):
         """Normalizes the result type parameter to the expected format."""
-        self.config.result_type = {
-            "markdown": ResultType.MD, "text": ResultType.TXT, "json": ResultType.JSON
-        }[self.config.result_type]
+        self.config.result_type = {"markdown": ResultType.MD, "text": ResultType.TXT, "json": ResultType.JSON}[
+            self.config.result_type
+        ]
 
     def _initialize_client(self):
         """Initializes the LlamaParse client."""

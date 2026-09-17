@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import os
-from typing import Sequence
+from collections.abc import Sequence
 
 from alembic import command
 from alembic.config import Config
 from psycopg import errors
 from sqlalchemy import create_engine, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.utils.exceptions import CriticalDatabaseSideError
 from backend.utils.schemas import *
@@ -57,9 +56,9 @@ class PostgreSQLDB:
     def run_migrations(self):
         """Runs alembic migrations."""
         alembic_cfg = Config(str(ROOT_DIR / "alembic.ini"))
-        alembic_cfg.set_main_option('sqlalchemy.url', self.settings.get_connection_url())
-        alembic_cfg.set_main_option('script_location', str(ROOT_DIR / 'src/databases/postgres/migrations/alembic'))
-        command.upgrade(alembic_cfg, 'head')
+        alembic_cfg.set_main_option("sqlalchemy.url", self.settings.get_connection_url())
+        alembic_cfg.set_main_option("script_location", str(ROOT_DIR / "src/databases/postgres/migrations/alembic"))
+        command.upgrade(alembic_cfg, "head")
 
     @connection
     async def select(self, table_obj: type[Base], filters: BaseModel = None, session: AsyncSession = None):
@@ -83,10 +82,7 @@ class PostgreSQLDB:
 
     @connection
     async def add_pipeline_run(
-            self,
-            patient_id: Patient.id,
-            task: TaskEnum,
-            session: AsyncSession = None
+        self, patient_id: Patient.id, task: TaskEnum, session: AsyncSession = None
     ) -> (PipelineRun.id, PipelineRun.uuid):
         """Adds started pipeline run."""
         pipeline_data = PipelineSchema(task=task.name, status=PipelineStatusEnum.active.name)
@@ -99,10 +95,7 @@ class PostgreSQLDB:
 
     @connection
     async def add_pipeline_step(
-            self,
-            pipeline_run_id: Pipeline.id,
-            pipeline_step_data: PipelineStepSchema,
-            session: AsyncSession = None
+        self, pipeline_run_id: Pipeline.id, pipeline_step_data: PipelineStepSchema, session: AsyncSession = None
     ) -> PipelineStep.id:
         """Adds pipeline step."""
         step_data = pipeline_step_data.model_dump(exclude_unset=True)
@@ -138,10 +131,7 @@ class PostgreSQLDB:
 
     @connection
     async def finish_pipeline_run(
-            self,
-            pipeline_run_id: int,
-            finished_at: datetime,
-            session: AsyncSession = None
+        self, pipeline_run_id: int, finished_at: datetime, session: AsyncSession = None
     ) -> bool:
         """Finishes pipeline run.
 
@@ -156,11 +146,7 @@ class PostgreSQLDB:
 
     @connection
     async def add_report(
-            self,
-            pipeline_run_id: int,
-            patient_id: int,
-            report_data: ReportCreateSchema,
-            session: AsyncSession = None
+        self, pipeline_run_id: int, patient_id: int, report_data: ReportCreateSchema, session: AsyncSession = None
     ) -> Report:
         """Adds generated report to the database."""
         report_data = report_data.model_dump(exclude_unset=True)
@@ -171,9 +157,7 @@ class PostgreSQLDB:
 
     @connection
     async def get_report(
-            self,
-            report_data: ReportFilterSchema,
-            session: AsyncSession = None
+        self, report_data: ReportFilterSchema, session: AsyncSession = None
     ) -> (Report.raw_json | None, Report.pipeline_run_id | None):
         """Gets report and its pipeline run id given report data."""
         result = await self.select(Report, report_data)
@@ -184,10 +168,7 @@ class PostgreSQLDB:
 
     @connection
     async def get_test_catalog_id(
-            self,
-            test_data: TestCatalogSchema,
-            to_add: bool = True,
-            session: AsyncSession = None
+        self, test_data: TestCatalogSchema, to_add: bool = True, session: AsyncSession = None
     ) -> TestCatalog.id | None:
         """Gets test catalog id. If no test found and <to_add> is True, adds new test."""
         # TODO: Make test name unification
@@ -222,9 +203,7 @@ class PostgreSQLDB:
 
     @connection
     async def get_patient_observations(
-            self,
-            patient_id: int,
-            session: AsyncSession = None
+        self, patient_id: int, session: AsyncSession = None
     ) -> Sequence[TestObservation]:
         """Gets all test observations for a given patient ordered by date."""
         query = (

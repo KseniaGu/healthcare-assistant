@@ -4,7 +4,7 @@ import os
 import re
 import tempfile
 
-from langdetect import detect_langs, LangDetectException
+from langdetect import LangDetectException, detect_langs
 
 from backend.utils.schemas import *
 
@@ -38,10 +38,10 @@ def get_hash_and_size(path: Path) -> tuple[str, int]:
 
 
 def generate_artifact_meta(
-        source_path: Path | str,
-        source: Any = None,
-        storage_type: str = None,
-        exception_to_raise: type[Exception] = BaseException
+    source_path: Path | str,
+    source: Any = None,
+    storage_type: str = None,
+    exception_to_raise: type[Exception] = BaseException,
 ) -> ArtifactSchema:
     """Generates artifact metadata."""
     tmp_path = None
@@ -126,7 +126,7 @@ def is_valid_text(text: str, confidence_threshold: float = 0.8, common_words: se
         return False
 
     # First, run statistical stopword check
-    words = set(re.findall(r'\b[а-яё]{1,10}\b', text.lower()))
+    words = set(re.findall(r"\b[а-яё]{1,10}\b", text.lower()))
     intersection = words.intersection(common_words)
 
     # Calculate ratio: if text is long, we expect at least a few common words
@@ -137,7 +137,7 @@ def is_valid_text(text: str, confidence_threshold: float = 0.8, common_words: se
     try:
         langs = detect_langs(text)
         for language in langs:
-            if language.lang == 'ru' and language.prob >= confidence_threshold:
+            if language.lang == "ru" and language.prob >= confidence_threshold:
                 return True
         return False
 

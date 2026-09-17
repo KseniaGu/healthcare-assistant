@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any
-from configs.constants import DATA_PROCESSING_LOGGING
+from typing import Any, Dict
+
 from backend.utils.common_funcs import get_logger
+from configs.constants import DATA_PROCESSING_LOGGING
 
 local_logger, _ = get_logger(DATA_PROCESSING_LOGGING)
+
 
 class LLMClient(ABC):
     """Abstract base class for all LLM clients."""
@@ -13,7 +15,7 @@ class LLMClient(ABC):
         self.params = self._normalize_parameters()
 
     @abstractmethod
-    def _normalize_parameters(self) -> Dict[str, Any]:
+    def _normalize_parameters(self) -> dict[str, Any]:
         """Translates normalized config params (like max_output_tokens) to vendor-specific names."""
         pass
 

@@ -3,9 +3,17 @@ from pydantic_settings import BaseSettings
 
 class DataSettings(BaseSettings):
     """Data settings configuration."""
+
     # PII extraction
     pii_entities: tuple = (
-        "person", "phone number", "email address", "date of birth", "age", "gender", "organization", "location"
+        "person",
+        "phone number",
+        "email address",
+        "date of birth",
+        "age",
+        "gender",
+        "organization",
+        "location",
     )
     pii_prediction_threshold: float = 0.4
 
@@ -14,7 +22,25 @@ class DataSettings(BaseSettings):
 
     # Text validation
     common_words: set = {
-        'и', 'в', 'не', 'на', 'я', 'быть', 'с', 'он', 'что', 'а', 'это', 'как', 'по', 'но', 'они', 'к', 'у', 'ты',
-        'из', 'мы'
+        "и",
+        "в",
+        "не",
+        "на",
+        "я",
+        "быть",
+        "с",
+        "он",
+        "что",
+        "а",
+        "это",
+        "как",
+        "по",
+        "но",
+        "они",
+        "к",
+        "у",
+        "ты",
+        "из",
+        "мы",
     }
     common_inequalities: tuple = ("<", ">", "≤", "≥", "~", "≈")

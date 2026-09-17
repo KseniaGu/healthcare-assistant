@@ -15,7 +15,6 @@ from configs.paths import PathSettings
 
 
 class GeminiClient(LLMClient):
-
     def __init__(self, config: GoogleGeminiSettings, path_settings: PathSettings):
         super().__init__(config)
         self.path_settings = path_settings
@@ -45,7 +44,10 @@ class GeminiClient(LLMClient):
             The processed response.
         """
         if self.params.tools:
-            processed_response = {"content": None, "tool_calls": [], }
+            processed_response = {
+                "content": None,
+                "tool_calls": [],
+            }
 
             # Extract content from the first candidate
             if response.candidates and response.candidates[0].content.parts:
@@ -99,13 +101,13 @@ class GeminiClient(LLMClient):
         return output_path
 
     def generate(
-            self,
-            prompt: str,
-            prompt_type: PromptTypeEnum = PromptTypeEnum.laboratory_test_processor,
-            prompt_version: str = "v1",
-            system_instruction: str = None,
-            response_json_schema: dict = None,
-            model_name: str = None
+        self,
+        prompt: str,
+        prompt_type: PromptTypeEnum = PromptTypeEnum.laboratory_test_processor,
+        prompt_version: str = "v1",
+        system_instruction: str = None,
+        response_json_schema: dict = None,
+        model_name: str = None,
     ) -> (str | dict, dict, Path):
         """Executes the Gemini API call."""
         model_name = model_name if model_name is not None else self.config.model_name
@@ -123,7 +125,7 @@ class GeminiClient(LLMClient):
             return parsed_response, usage_metadata, raw_output_path
 
         except AssertionError:
-            message = f"Failed to generate content via Gemini client: prompt is empty"
+            message = "Failed to generate content via Gemini client: prompt is empty"
             local_logger.error(message)
             raise BaseLLMError(message)
         except APIError as e:

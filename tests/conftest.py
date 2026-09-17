@@ -2,8 +2,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 from backend.data_processing.laboratory_test import LaboratoryTestProcessor
 from backend.utils.common_funcs import get_logger
@@ -31,7 +30,9 @@ async def pipeline():
 async def empty_test_database(pipeline):
     """Truncates only used test database tables after each test."""
     processor, _ = pipeline
-    assert processor.database.engine.url.database == testing_settings.test_database_name, "Current database is not for testing!"
+    assert processor.database.engine.url.database == testing_settings.test_database_name, (
+        "Current database is not for testing!"
+    )
     tables_to_clean = set()
 
     def _mark_for_cleaning(*table_names):

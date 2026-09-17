@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 DATA_DIR = ROOT_DIR / "data"
 ENV_PATH = ROOT_DIR / ".env"
-DATA_PROCESSING_LOGGING = 'Laboratory results processing'
+DATA_PROCESSING_LOGGING = "Laboratory results processing"
 BASE_PATIENT_NAME = "base_patient__seed__90ba650e5a6c"
 
 DATA_DIR.mkdir(exist_ok=True)

@@ -6,6 +6,7 @@ from configs.constants import ENV_PATH
 
 class PostgreSQLSettings(BaseSettings):
     """PostgreSQL database settings configuration."""
+
     username: SecretStr | None = None
     password: SecretStr | None = None
     database_name: str | None = None

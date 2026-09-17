@@ -2,7 +2,7 @@ import re
 
 from configs.testing import TestingSettings
 from src.databases.postgres.database import PostgreSQLDB
-from src.databases.postgres.models import Report, TestObservation, PipelineRun
+from src.databases.postgres.models import PipelineRun, Report, TestObservation
 
 
 def drop_space(text: str) -> str:

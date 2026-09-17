@@ -1,29 +1,38 @@
 import asyncio
 import json
 import os.path
-from datetime import timezone
+from datetime import UTC, timezone
 
 import fitz
 import ftfy
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 from gliner import GLiNER
-from langfuse import observe, get_client
+from langfuse import get_client, observe
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from backend.models.llm_clients.gemini import GeminiClient
 from backend.models.llm_clients.llama_parse import LlamaParseClient
-from backend.utils.common_funcs import write_file, read_file, get_logger
+from backend.utils.common_funcs import get_logger, read_file, write_file
 from backend.utils.exceptions import *
-from backend.utils.helpers import generate_artifact_meta, get_hash_and_size, is_valid_text, process_test_value, \
-    clean_json_markdown
+from backend.utils.helpers import (
+    clean_json_markdown,
+    generate_artifact_meta,
+    get_hash_and_size,
+    is_valid_text,
+    process_test_value,
+)
 from backend.utils.prompt_engine import PromptEngine
 from backend.utils.schemas import *
-from configs.constants import GLINER_MAX_WINDOW_SIZE, GLINER_TOKENS_OVERLAP, DEFAULT_LAB_TEST_NAME, \
-    DATA_PROCESSING_LOGGING
+from configs.constants import (
+    DATA_PROCESSING_LOGGING,
+    DEFAULT_LAB_TEST_NAME,
+    GLINER_MAX_WINDOW_SIZE,
+    GLINER_TOKENS_OVERLAP,
+)
 from configs.data import DataSettings
 from configs.database import PostgreSQLSettings
-from configs.enums import PromptTypeEnum, TaskEnum, StepTypeEnum, TestFlagTypeEnum
+from configs.enums import PromptTypeEnum, StepTypeEnum, TaskEnum, TestFlagTypeEnum
 from configs.models import ModelSettings
 from configs.paths import PathSettings
 from src.databases.postgres.database import PostgreSQLDB
@@ -36,11 +45,11 @@ class LaboratoryTestProcessor:
     """A class for processing laboratory analysis results."""
 
     def __init__(
-            self,
-            model_settings: ModelSettings,
-            data_settings: DataSettings,
-            path_settings: PathSettings,
-            database_settings: PostgreSQLSettings
+        self,
+        model_settings: ModelSettings,
+        data_settings: DataSettings,
+        path_settings: PathSettings,
+        database_settings: PostgreSQLSettings,
     ):
         self.model_settings = model_settings
         self.data_settings = data_settings
@@ -66,17 +75,17 @@ class LaboratoryTestProcessor:
         """Chunking solution suggested by https://github.com/urchade/GLiNER/discussions/113#discussioncomment-9956716."""
         token_scale_down_ratio = 5.0
         if len(text) > token_count * token_scale_down_ratio:
-            text = text[:int(token_count * token_scale_down_ratio)]
+            text = text[: int(token_count * token_scale_down_ratio)]
 
         try:
             tokenized = self.pii_extractor_tokenizer(text, add_special_tokens=False)
             detokenized = self.pii_extractor_tokenizer.decode(
-                tokenized['input_ids'][:token_count], skip_special_tokens=True
+                tokenized["input_ids"][:token_count], skip_special_tokens=True
             )
         except Exception as e:
             raise PIIMaskingError(f"An error occurred while splitting the input text into chunks: {str(e)}")
 
-        return text[:len(detokenized)]
+        return text[: len(detokenized)]
 
     def get_text_chunks(self, text: str):
         """Splits text into chunks if text is longer than GLINER_MAX_WINDOW_SIZE."""
@@ -87,7 +96,7 @@ class LaboratoryTestProcessor:
             chunks.append(window_text)
 
             if len(window_text) <= GLINER_TOKENS_OVERLAP:
-                print('breaking ...')
+                print("breaking ...")
                 break
             cursor_index += len(window_text) - GLINER_TOKENS_OVERLAP
 
@@ -96,9 +105,9 @@ class LaboratoryTestProcessor:
     @staticmethod
     def mask_images(images: list, page: fitz.Page):
         """Masks out (with black rectangular) images found in the given document page."""
-        for image in tqdm(images, desc='Masking images...'):
-            if image.get('bbox') is not None:
-                page.add_redact_annot(quad=image['bbox'], text="IMAGE", fill=(0, 0, 0))
+        for image in tqdm(images, desc="Masking images..."):
+            if image.get("bbox") is not None:
+                page.add_redact_annot(quad=image["bbox"], text="IMAGE", fill=(0, 0, 0))
 
     def mask_entities(self, chunks: list[dict], page: fitz.Page, textpage: fitz.TextPage | None = None) -> bool:
         """Detects and masks out (with black rectangular) PII entities.
@@ -107,7 +116,7 @@ class LaboratoryTestProcessor:
         """
         entities_found = False
 
-        for chunk in tqdm(chunks, desc='Masking PII entities...'):
+        for chunk in tqdm(chunks, desc="Masking PII entities..."):
             try:
                 entities = self.pii_extractor.predict_entities(
                     chunk, self.data_settings.pii_entities, threshold=self.data_settings.pii_prediction_threshold
@@ -122,7 +131,7 @@ class LaboratoryTestProcessor:
                     break
                 continue
 
-            for entity in tqdm(entities, desc='Processing found entities...'):
+            for entity in tqdm(entities, desc="Processing found entities..."):
                 sensitive_text, label = entity["text"], entity["label"]
                 areas = page.search_for(sensitive_text, textpage=textpage)
 
@@ -204,7 +213,7 @@ class LaboratoryTestProcessor:
             model_version=self.model_settings.pii_extractor.model_path,
             provider=self.model_settings.pii_extractor.provider,
             config={"tokenizer_path": self.model_settings.pii_extractor.tokenizer_path},
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
         )
         log_info = {key: getattr(step_data, key) for key in ("tool_name", "model_version", "provider")}
         self.logger.update_current_span(metadata=log_info)
@@ -240,7 +249,7 @@ class LaboratoryTestProcessor:
             tool_name=self.model_settings.document_parser.tool_name,
             provider=self.model_settings.document_parser.provider,
             config=config,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
         )
 
         return step_data
@@ -301,7 +310,7 @@ class LaboratoryTestProcessor:
             model_version=self.model_settings.data_processor.model_name,
             prompt_path=f"{prompt_type.value}/{prompt_version}.yaml",
             provider=self.model_settings.data_processor.provider,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
             extra_data={"llm_raw_output_path": str(raw_output_path), "usage_metadata": usage_metadata},
         )
         log_info = {key: getattr(step_data, key) for key in ("tool_name", "model_version", "provider")}
@@ -312,13 +321,13 @@ class LaboratoryTestProcessor:
 
     @observe(name="LaboratoryTestProcessor.log_pipeline_step", capture_input=False, capture_output=False)
     async def log_pipeline_step(
-            self,
-            pipeline_run_id: int,
-            step_data: PipelineStepSchema | None,
-            storage_type: str,
-            input_artifact_id: int,
-            output_path: Path,
-            step_type: StepTypeEnum,
+        self,
+        pipeline_run_id: int,
+        step_data: PipelineStepSchema | None,
+        storage_type: str,
+        input_artifact_id: int,
+        output_path: Path,
+        step_type: StepTypeEnum,
     ) -> int:
         """Logs processing pipeline step metadata."""
         self.logger.update_current_span(metadata={"step_type": step_type})
@@ -341,14 +350,14 @@ class LaboratoryTestProcessor:
 
     @observe(name="LaboratoryTestProcessor.save_report", capture_input=False, capture_output=False)
     async def save_report(
-            self,
-            pipeline_run_id: int,
-            patient_id: int,
-            input_path: Path,
-            structured_output_path: Path,
-            structured_output: dict | list,
-            processed_at: datetime,
-            source_artifact_id: int
+        self,
+        pipeline_run_id: int,
+        patient_id: int,
+        input_path: Path,
+        structured_output_path: Path,
+        structured_output: dict | list,
+        processed_at: datetime,
+        source_artifact_id: int,
     ):
         """Saves report (structured output obtained by the processor), extracts and saves test observations."""
         if isinstance(structured_output, dict):
@@ -387,8 +396,7 @@ class LaboratoryTestProcessor:
                     self.logger.update_current_span(level="WARNING", status_message=message)
 
                 test_catalog_data = TestCatalogSchema(
-                    canonical_name=test_name,
-                    preferred_unit=result.get("units_normalized")
+                    canonical_name=test_name, preferred_unit=result.get("units_normalized")
                 )
                 test_catalog_id = await self.database.get_test_catalog_id(test_catalog_data)
                 test_value, inequality = process_test_value(result.get("value"), self.data_settings.common_inequalities)
@@ -438,7 +446,7 @@ class LaboratoryTestProcessor:
                     source_path=input_path,
                     source_artifact_id=input_artifact_id,
                     anonymized_path=anonymized_output_path,
-                    report_data=structured_output
+                    report_data=structured_output,
                 )
                 return context
 
@@ -452,12 +460,14 @@ class LaboratoryTestProcessor:
             observation.update(metadata={"pipeline_run_id_uuid": pipeline_run_uuid})
 
             # Mask out PII
-            step_data = await asyncio.to_thread(
-                self.mask_pii, input_path, anonymized_output_path
-            )
+            step_data = await asyncio.to_thread(self.mask_pii, input_path, anonymized_output_path)
             output_artifact_id = await self.log_pipeline_step(
-                pipeline_run_id, step_data, storage_type, input_artifact_id, anonymized_output_path,
-                StepTypeEnum.anonymize
+                pipeline_run_id,
+                step_data,
+                storage_type,
+                input_artifact_id,
+                anonymized_output_path,
+                StepTypeEnum.anonymize,
             )
 
         context = PipelineRunContext(
@@ -504,15 +514,24 @@ class LaboratoryTestProcessor:
                 raise LaboratoryTestProcessingError("The document's structured output is empty")
 
             await self.log_pipeline_step(
-                pipeline_run_id, step_data, storage_type, output_artifact_id, processed_output_path,
-                StepTypeEnum.process
+                pipeline_run_id,
+                step_data,
+                storage_type,
+                output_artifact_id,
+                processed_output_path,
+                StepTypeEnum.process,
             )
 
             # Finish pipeline and save processed report to database
-            finished_at = datetime.now(timezone.utc)
+            finished_at = datetime.now(UTC)
             await self.save_report(
-                pipeline_run_id, pipeline_context.patient_id, input_path, processed_output_path, structured_output,
-                finished_at, pipeline_context.source_artifact_id
+                pipeline_run_id,
+                pipeline_context.patient_id,
+                input_path,
+                processed_output_path,
+                structured_output,
+                finished_at,
+                pipeline_context.source_artifact_id,
             )
             try:
                 await self.database.finish_pipeline_run(pipeline_run_id, finished_at)
@@ -526,6 +545,7 @@ class LaboratoryTestProcessor:
 
 async def main():
     from configs.constants import BASE_PATIENT_NAME
+
     model_config = ModelSettings()
     data_config = DataSettings()
     path_settings = PathSettings()

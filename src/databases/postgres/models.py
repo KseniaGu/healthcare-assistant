@@ -2,16 +2,17 @@ import uuid as _uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, Index, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, BIGINT, UUID
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import BIGINT, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func, text
 
-from configs.enums import StepTypeEnum, TestFlagTypeEnum, ToolNameEnum, ProviderNameEnum, TaskEnum, PipelineStatusEnum
+from configs.enums import PipelineStatusEnum, ProviderNameEnum, StepTypeEnum, TaskEnum, TestFlagTypeEnum, ToolNameEnum
 
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
+
     pass
 
 
@@ -26,11 +27,12 @@ class Patient(Base):
         observations: List of test observations for the patient.
         pipeline_runs: List of pipeline runs associated with the patient.
     """
+
     __tablename__ = "patient"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    dob: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    dob: Mapped[datetime | None] = mapped_column(nullable=True)
 
     reports: Mapped[list["Report"]] = relationship(back_populates="patient", cascade="all, delete-orphan")
     observations: Mapped[list["TestObservation"]] = relationship(back_populates="patient", cascade="all, delete-orphan")
@@ -39,7 +41,7 @@ class Patient(Base):
 
 class Report(Base):
     """A class representing a medical report generated from a pipeline run.
-    
+
     Attributes:
         id: Unique identifier for the report.
         uuid: Universally unique identifier for the report.
@@ -52,6 +54,7 @@ class Report(Base):
         processed_at: Timestamp when the report was processed.
         raw_json: Raw JSON data of the report.
     """
+
     __tablename__ = "report"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -60,8 +63,8 @@ class Report(Base):
     )
     pipeline_run_id: Mapped[int] = mapped_column(ForeignKey("pipeline_run.id"), nullable=False)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patient.id", ondelete="CASCADE"), index=True, nullable=False)
-    report_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    source_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=False)
+    report_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_path: Mapped[str | None] = mapped_column(String(512), nullable=False)
     source_artifact_id: Mapped[int] = mapped_column(ForeignKey("artifact.id"), nullable=False)
     report_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -74,22 +77,23 @@ class Report(Base):
 
 class TestCatalog(Base):
     """A class for catalog of standard laboratory tests.
-    
+
     Attributes:
         id: Unique identifier for the test catalog entry.
         canonical_name: Standardized name of the test.
         preferred_unit: Preferred unit of measurement for the test results.
     """
+
     __tablename__ = "test_catalog"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     canonical_name: Mapped[str] = mapped_column(String(256), unique=True, index=True, nullable=False)
-    preferred_unit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    preferred_unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class TestObservation(Base):
     """A class representing a single test observation or result.
-    
+
     Attributes:
         id: Unique identifier for the observation.
         test_catalog_id: Reference to the standard test in the catalog.
@@ -103,23 +107,25 @@ class TestObservation(Base):
         observation_date: Date when the test was conducted.
         created_at: Timestamp when the observation was recorded.
     """
+
     __tablename__ = "test_observation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    test_catalog_id: Mapped[Optional[int]] = mapped_column(ForeignKey("test_catalog.id"), nullable=True, index=True)
+    test_catalog_id: Mapped[int | None] = mapped_column(ForeignKey("test_catalog.id"), nullable=True, index=True)
     report_id: Mapped[int] = mapped_column(ForeignKey("report.id", ondelete="CASCADE"), index=True, nullable=False)
     patient_id: Mapped[int] = mapped_column(ForeignKey("patient.id", ondelete="CASCADE"), index=True, nullable=False)
 
-    test_name: Mapped[Optional[str]] = mapped_column(String(256), index=True, nullable=True)
-    observed_value: Mapped[Optional[float]] = mapped_column(nullable=True)
-    observed_value_inequality: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
-    unit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    flag: Mapped[Optional[TestFlagTypeEnum]] = mapped_column(
-        Enum(TestFlagTypeEnum, name="test_flag_type_enum"), nullable=True,
+    test_name: Mapped[str | None] = mapped_column(String(256), index=True, nullable=True)
+    observed_value: Mapped[float | None] = mapped_column(nullable=True)
+    observed_value_inequality: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    flag: Mapped[TestFlagTypeEnum | None] = mapped_column(
+        Enum(TestFlagTypeEnum, name="test_flag_type_enum"),
+        nullable=True,
     )
-    reference_range: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    reference_range: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    observation_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    observation_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     catalog: Mapped["TestCatalog"] = relationship(backref="observations")
@@ -129,7 +135,7 @@ class TestObservation(Base):
 
 class Artifact(Base):
     """A class representing a stored file or data artifact in the system.
-    
+
     Attributes:
         id: Unique identifier for the artifact.
         uuid: Universally unique identifier for the artifact.
@@ -141,19 +147,19 @@ class Artifact(Base):
         size: Size of the artifact in bytes.
         created_at: Timestamp when the artifact was created.
     """
+
     __tablename__ = "artifact"
 
     id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     uuid: Mapped[_uuid.UUID] = mapped_column(
         UUID(as_uuid=True), nullable=False, server_default=text("uuid_generate_v4()"), unique=True, index=True
     )
-    storage_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)  # E.g., "s3", "hetzner"
-    storage_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True,
-                                                        index=True)  # E.g., "s3://bucket/key"
-    checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True)
-    checksum_algorithm: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    mime_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    size: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True)
+    storage_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)  # E.g., "s3", "hetzner"
+    storage_path: Mapped[str | None] = mapped_column(String(1024), nullable=True, index=True)  # E.g., "s3://bucket/key"
+    checksum: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    checksum_algorithm: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size: Mapped[int | None] = mapped_column(BIGINT, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     input_steps: Mapped[list["PipelineStep"]] = relationship(
@@ -171,7 +177,7 @@ class Artifact(Base):
 
 class Pipeline(Base):
     """A class representing a processing pipeline configuration.
-    
+
     Attributes:
         id: Unique identifier for the pipeline.
         name: Name of the pipeline.
@@ -181,17 +187,20 @@ class Pipeline(Base):
         status: Current status of the pipeline.
         created_at: Timestamp when the pipeline was created.
     """
+
     __tablename__ = "pipeline"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     version: Mapped[str] = mapped_column(String(64), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     task: Mapped[TaskEnum] = mapped_column(Enum(TaskEnum, name="task_enum"), nullable=False, index=True)
 
     status: Mapped[PipelineStatusEnum] = mapped_column(
-        Enum(PipelineStatusEnum, name="pipeline_status_enum"), nullable=False, index=True,
+        Enum(PipelineStatusEnum, name="pipeline_status_enum"),
+        nullable=False,
+        index=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -207,6 +216,7 @@ class PipelineRun(Base):
         started_at: Timestamp when the run started.
         finished_at: Timestamp when the run completed.
     """
+
     __tablename__ = "pipeline_run"
 
     id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
@@ -218,7 +228,7 @@ class PipelineRun(Base):
 
     # Timestamps
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     steps: Mapped[list["PipelineStep"]] = relationship(back_populates="pipeline_run", cascade="all, delete-orphan")
     patient: Mapped["Patient"] = relationship(back_populates="pipeline_runs")
@@ -243,32 +253,34 @@ class PipelineStep(Base):
         finished_at: Timestamp when the step completed.
         extra_data: Additional data or metadata for the step.
     """
+
     __tablename__ = "pipeline_step"
 
     id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     pipeline_run_id: Mapped[int] = mapped_column(
         ForeignKey("pipeline_run.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    step_type: Mapped[Optional[StepTypeEnum]] = mapped_column(Enum(StepTypeEnum, name="step_type_enum"), nullable=True)
-    tool_name: Mapped[Optional[ToolNameEnum]] = mapped_column(Enum(ToolNameEnum, name="tool_name_enum"), nullable=True)
-    model_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    prompt_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    provider: Mapped[Optional[ProviderNameEnum]] = mapped_column(
-        Enum(ProviderNameEnum, name="provider_name_enum"), nullable=True,
+    step_type: Mapped[StepTypeEnum | None] = mapped_column(Enum(StepTypeEnum, name="step_type_enum"), nullable=True)
+    tool_name: Mapped[ToolNameEnum | None] = mapped_column(Enum(ToolNameEnum, name="tool_name_enum"), nullable=True)
+    model_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    provider: Mapped[ProviderNameEnum | None] = mapped_column(
+        Enum(ProviderNameEnum, name="provider_name_enum"),
+        nullable=True,
     )
 
-    config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    input_artifact_id: Mapped[Optional[int]] = mapped_column(ForeignKey("artifact.id"), nullable=True)
-    output_artifact_id: Mapped[Optional[int]] = mapped_column(ForeignKey("artifact.id"), nullable=True)
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    input_artifact_id: Mapped[int | None] = mapped_column(ForeignKey("artifact.id"), nullable=True)
+    output_artifact_id: Mapped[int | None] = mapped_column(ForeignKey("artifact.id"), nullable=True)
 
     # Timestamps
-    started_at: Mapped[Optional[datetime]] = mapped_column(
+    started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Extra data
-    extra_data: Mapped[Optional[str]] = mapped_column(JSONB, nullable=True)  # E.g. raw text generated by LLM
+    extra_data: Mapped[str | None] = mapped_column(JSONB, nullable=True)  # E.g. raw text generated by LLM
 
     pipeline_run: Mapped["PipelineRun"] = relationship(back_populates="steps")
     input_artifact: Mapped[list["Artifact"]] = relationship(foreign_keys=[input_artifact_id])

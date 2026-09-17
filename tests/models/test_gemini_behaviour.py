@@ -3,7 +3,7 @@ import re
 
 import jsonschema
 import pytest
-from jsonschema import validate, ValidationError
+from jsonschema import ValidationError, validate
 
 from backend.models.llm_clients.gemini import GeminiClient
 from backend.utils.common_funcs import read_file
@@ -57,13 +57,14 @@ def test_document_processing(gemini_model, prompt_metadata):
 
     try:
         validate(
-            instance=structured_output_to_validate, schema=system_prompt["response_json_schema"],
-            format_checker=jsonschema.FormatChecker()
+            instance=structured_output_to_validate,
+            schema=system_prompt["response_json_schema"],
+            format_checker=jsonschema.FormatChecker(),
         )
     except ValidationError as e:
         pytest.fail(f"Gemini's produced output doesn't match the schema: {e}")
 
-    mismatch_message = f"Expected first test to be '%s', got '%s'"
+    mismatch_message = "Expected first test to be '%s', got '%s'"
     for key in ("name", "value", "reference_range"):
         first_output = structured_output[0][key]
         first_output = drop_space(first_output) if key != "name" else first_output

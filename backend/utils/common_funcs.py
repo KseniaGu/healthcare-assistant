@@ -14,7 +14,7 @@ from backend.utils.exceptions import DocumentParsingError
 
 def write_file(file: Any, path: Path):
     """Writes data to a file with the specified format.
-    
+
     Args:
         file: The data to be written to the file.
         path: The path where the file should be written.
@@ -35,19 +35,19 @@ def write_file(file: Any, path: Path):
 
 def write_temp_file(file: Any, file_suffix: str = ".pdf", file_prefix: str = "temp_file_") -> Path:
     """Writes data to a temporary file.
-    
+
     Args:
         file: The data to be written to the temporary file.
         file_suffix: The suffix for the temporary file.
         file_prefix: The prefix for the temporary file.
-        
+
     Returns:
         The path to the created temporary file.
     """
     try:
         if isinstance(file, (bytes, bytearray)):
             fd, path = tempfile.mkstemp(suffix=file_suffix, prefix=file_prefix)
-            with os.fdopen(fd, 'wb') as tmp:
+            with os.fdopen(fd, "wb") as tmp:
                 tmp.write(file)
             return Path(path)
         else:
@@ -58,10 +58,10 @@ def write_temp_file(file: Any, file_suffix: str = ".pdf", file_prefix: str = "te
 
 def read_file(path: Path) -> Any:
     """Reads data from a file with the specified format.
-    
+
     Args:
         path: The path to the file to be read.
-        
+
     Returns:
         The data read from the file.
     """
@@ -71,12 +71,12 @@ def read_file(path: Path) -> Any:
             with open(path, "rb") as f:
                 file = pickle.load(f)
         elif extension == ".yaml":
-            with open(path, "r") as f:
+            with open(path) as f:
                 file = yaml.safe_load(f)
         elif extension == ".txt":
-            file = open(path, "r").read()
+            file = open(path).read()
         elif extension == ".json":
-            with open(path, "r") as f:
+            with open(path) as f:
                 file = json.load(f)
         else:
             print(f"Unsupported extension: {extension} (.pickle, .yaml, .txt, .json are only available)")
@@ -90,13 +90,14 @@ def read_file(path: Path) -> Any:
 # Logging helpers
 class MemoryLogHandler(BufferingHandler):
     """A logging handler that stores log records in memory.
-    
+
     This handler extends BufferingHandler to store log records in memory
         and provides a method to retrieve the formatted log messages.
     """
+
     def __init__(self, capacity: int):
         """Initializes the handler with a buffer of the specified capacity.
-        
+
         Args:
             capacity: Maximum number of log records to store.
         """
@@ -104,7 +105,7 @@ class MemoryLogHandler(BufferingHandler):
 
     def get_logs(self) -> list[str]:
         """Gets all log messages currently in the buffer.
-        
+
         Returns:
             A list of formatted log messages.
         """
@@ -113,12 +114,12 @@ class MemoryLogHandler(BufferingHandler):
 
 def get_logger(name: str = __name__) -> tuple[logging.Logger, MemoryLogHandler]:
     """Gets a configured logger instance with a memory handler.
-    
+
     Args:
         name: The name of the logger. Defaults to the module name.
     """
     logger = logging.getLogger(name)
-    base_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    base_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=base_format, handlers=[logging.StreamHandler()])
 
     memory_handler = MemoryLogHandler(100)

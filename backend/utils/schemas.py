@@ -1,25 +1,26 @@
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from configs.enums import StepTypeEnum, ToolNameEnum, ProviderNameEnum
+from configs.enums import ProviderNameEnum, StepTypeEnum, ToolNameEnum
 
 
 class PipelineRunContext(BaseModel):
     """Data structure passed between the Anonymization and Analysis phases."""
+
     pipeline_run_id: int
     patient_id: int
     anonymized_path: Path
     source_path: Path
 
-    report_data: Optional[dict] = None  # In case the document was already processed and report is done
-    pipeline_run_uuid: Optional[uuid.UUID] = None
-    source_artifact_id: Optional[int] = None
-    anonymized_artifact_id: Optional[int] = None
-    processor_model_name: Optional[str] = None
+    report_data: dict | None = None  # In case the document was already processed and report is done
+    pipeline_run_uuid: uuid.UUID | None = None
+    source_artifact_id: int | None = None
+    anonymized_artifact_id: int | None = None
+    processor_model_name: str | None = None
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -29,6 +30,7 @@ class PipelineSchema(BaseModel):
 
     This class is used to filter pipelines based on specific criteria.
     """
+
     task: str
     status: str
 
@@ -38,16 +40,17 @@ class PipelineStepSchema(BaseModel):
 
     This class is used to describe pipeline processing step.
     """
-    step_type: Optional[StepTypeEnum] = None
-    tool_name: Optional[ToolNameEnum] = None
-    model_version: Optional[str] = None
-    prompt_path: Optional[str] = None
-    provider: Optional[ProviderNameEnum] = None
-    config: Optional[Dict[str, Any]] = None
-    input_artifact_id: Optional[int] = None
-    output_artifact_id: Optional[int] = None
-    finished_at: Optional[datetime] = None
-    extra_data: Optional[Dict[str, Any]] = None
+
+    step_type: StepTypeEnum | None = None
+    tool_name: ToolNameEnum | None = None
+    model_version: str | None = None
+    prompt_path: str | None = None
+    provider: ProviderNameEnum | None = None
+    config: dict[str, Any] | None = None
+    input_artifact_id: int | None = None
+    output_artifact_id: int | None = None
+    finished_at: datetime | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class ArtifactSchema(BaseModel):
@@ -55,12 +58,13 @@ class ArtifactSchema(BaseModel):
 
     This class represents metadata for files or data artifacts in the system.
     """
-    storage_type: Optional[str] = None
-    storage_path: Optional[str] = None
-    checksum: Optional[str] = None
-    checksum_algorithm: Optional[str] = None
-    mime_type: Optional[str] = None
-    size: Optional[int] = None
+
+    storage_type: str | None = None
+    storage_path: str | None = None
+    checksum: str | None = None
+    checksum_algorithm: str | None = None
+    mime_type: str | None = None
+    size: int | None = None
 
 
 class ReportCreateSchema(BaseModel):
@@ -68,13 +72,14 @@ class ReportCreateSchema(BaseModel):
 
     This class is used to validate and structure report data before it's stored.
     """
+
     source_artifact_id: int
     report_hash: str
-    raw_json: Dict[str, Any]
+    raw_json: dict[str, Any]
     processed_at: datetime = Field(default_factory=datetime.now)
 
-    report_date: Optional[datetime] = None
-    source_path: Optional[str] = None
+    report_date: datetime | None = None
+    source_path: str | None = None
 
 
 class ReportFilterSchema(BaseModel):
@@ -82,7 +87,8 @@ class ReportFilterSchema(BaseModel):
 
     This class is used to filter reports based on specific criteria.
     """
-    source_artifact_id: Optional[int] = None
+
+    source_artifact_id: int | None = None
 
 
 class TestCatalogSchema(BaseModel):
@@ -90,9 +96,10 @@ class TestCatalogSchema(BaseModel):
 
     This class represents standard test information in the catalog.
     """
+
     canonical_name: str
 
-    preferred_unit: Optional[str] = None
+    preferred_unit: str | None = None
 
 
 class TestObservationSchema(BaseModel):
@@ -100,15 +107,16 @@ class TestObservationSchema(BaseModel):
 
     This class represents the results of individual laboratory tests.
     """
+
     report_id: int
     patient_id: int
 
-    test_catalog_id: Optional[int] = None
-    test_name: Optional[str] = None
-    observed_value: Optional[float] = None
-    observed_value_inequality: Optional[str] = None
-    unit: Optional[str] = None
-    flag: Optional[str] = None
-    reference_range: Optional[str] = None
-    observation_date: Optional[datetime] = None
-    created_at: Optional[datetime] = None
+    test_catalog_id: int | None = None
+    test_name: str | None = None
+    observed_value: float | None = None
+    observed_value_inequality: str | None = None
+    unit: str | None = None
+    flag: str | None = None
+    reference_range: str | None = None
+    observation_date: datetime | None = None
+    created_at: datetime | None = None

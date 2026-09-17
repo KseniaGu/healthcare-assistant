@@ -1,11 +1,11 @@
-from datetime import timezone
+from datetime import UTC, timezone
 
 from backend.utils.common_funcs import read_file
 from backend.utils.schemas import PipelineStepSchema
 from configs.models import ModelSettings
 from configs.testing import TestingSettings
 from src.databases.postgres.models import *
-from tests.utils import check_reports, check_test_observations, check_pipeline_run
+from tests.utils import check_pipeline_run, check_reports, check_test_observations
 
 testing_settings = TestingSettings()
 model_settings = ModelSettings()
@@ -22,7 +22,7 @@ async def test_pipeline_saves_to_database(mocker, pipeline, empty_test_database,
         model_version=model_settings.pii_extractor.model_path,
         provider=model_settings.pii_extractor.provider,
         config={"tokenizer_path": model_settings.pii_extractor.tokenizer_path},
-        finished_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(UTC),
     )
     parse_return_value = read_file(testing_settings.test_user_data_parsed_path)
     gemini_output_path = testing_settings.test_user_data_gemini_output_path
@@ -43,8 +43,12 @@ async def test_pipeline_saves_to_database(mocker, pipeline, empty_test_database,
 
     # Clean database used tables and remove generated test files
     tables_to_drop = (
-        Artifact.__tablename__, PipelineRun.__tablename__, PipelineStep.__tablename__, Report.__tablename__,
-        TestCatalog.__tablename__, TestObservation.__tablename__
+        Artifact.__tablename__,
+        PipelineRun.__tablename__,
+        PipelineStep.__tablename__,
+        Report.__tablename__,
+        TestCatalog.__tablename__,
+        TestObservation.__tablename__,
     )
     empty_test_database(*tables_to_drop)
     parsed_output_file = testing_settings.test_user_data_path.name.replace(".pdf", "_parsed.txt")
