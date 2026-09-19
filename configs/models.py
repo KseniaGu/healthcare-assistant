@@ -40,6 +40,7 @@ class GoogleGeminiSettings(BaseLLMSettings):
     api_key: SecretStr | None = None
     use_grounding: bool = False
     response_mime_type: str = "application/json"
+    max_tokens: int = 16384
 
 
 # TODO: Test OpenAI models
@@ -98,4 +99,4 @@ class ModelSettings(BaseSettings):
         tokenizer_path="microsoft/deberta-v3-large",
     )
     document_parser: LlamaParseSettings = LlamaParseSettings(parse_mode="parse_page_without_llm")
-    data_processor: GoogleGeminiSettings = GoogleGeminiSettings(model_name="gemini-2.5-flash-lite")
+    data_processor: GoogleGeminiSettings = GoogleGeminiSettings(model_name="gemini-3.1-flash-lite")

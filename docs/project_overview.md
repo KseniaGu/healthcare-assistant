@@ -57,7 +57,7 @@ Current extraction defaults are explicit in the code:
 
 | Consumer | Prompt selection | Model default |
 | --- | --- | --- |
-| Pipeline and Gemini behavior test | `DataSettings.prompt_version = "v3"` | `gemini-2.5-flash-lite` |
+| Pipeline and Gemini behavior test | `DataSettings.prompt_version = "v3"` | `gemini-3.1-flash-lite` |
 | Direct `GeminiClient.generate()` calls omitting arguments | `prompt_version="v1"` | Configured Gemini model |
 
 The UI can override the generation model, but prompt selection is not model-specific.

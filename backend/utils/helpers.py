@@ -145,8 +145,14 @@ def is_valid_text(text: str, confidence_threshold: float = 0.8, common_words: se
         return False
 
 
-def process_test_value(test_value: str, common_inequalities: tuple) -> (float, str):
-    """Extracts inequality from the observed test value if presented."""
+def process_test_value(test_value: str | float | int | None, common_inequalities: tuple) -> tuple[float | None, str]:
+    """Accepts JSON numbers/nulls or extract an inequality from a numeric string."""
+    if test_value is None:
+        return None, ""
+    if isinstance(test_value, bool):
+        raise ValueError("Test value is not numeric.")
+    if isinstance(test_value, (int, float)):
+        return float(test_value), ""
     if any(inequality in test_value for inequality in common_inequalities):
         value = re.findall("\d+\.*\d*", test_value)
         if value:

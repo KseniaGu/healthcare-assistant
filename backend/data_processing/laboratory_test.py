@@ -235,8 +235,10 @@ class LaboratoryTestProcessor:
                 raise DocumentParsingError(f"Parsed empty document. Input path: {input_path}")
 
             write_file(text_content, output_path)
+        except DocumentParsingError:
+            raise
         except Exception as e:
-            raise DocumentParsingError(f"Failed to parse document by path: {input_path}. Error: {str(e)}")
+            raise DocumentParsingError(f"Failed to parse document by path: {input_path}. Error: {str(e)}") from e
 
         # Step data for database record
         config = {
@@ -297,6 +299,8 @@ class LaboratoryTestProcessor:
                 )
                 structured_output = json.loads(clean_json_markdown(model_output))
                 write_file(structured_output, output_path)
+            except BaseLLMError:
+                raise
             except Exception as e:
                 raise LaboratoryTestProcessingError(
                     f"Failed to get structured output from the document ({input_path}). Error: {str(e)}"

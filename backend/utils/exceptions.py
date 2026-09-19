@@ -12,6 +12,13 @@ class BaseLLMError(Exception):
     is_retryable = True
 
 
+class IncompleteLLMResponseError(BaseLLMError):
+    """The model exhausted its output budget before completing the report."""
+
+    user_message = "The AI response was cut off. Try processing fewer pages at a time."
+    is_retryable = False
+
+
 class DocumentParsingError(Exception):
     """Base class for errors encountered while parsing medical documents."""
 

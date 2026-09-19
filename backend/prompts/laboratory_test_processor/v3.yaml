@@ -2,9 +2,9 @@ _meta:
   version: "3.0"
   description: "Lab blood test results extractor prompt template."
   model_settings:
-    model: "gemini-2.5-flash-lite"
+    model: "gemini-3.1-flash-lite"
     temperature: 0.0
-    max_output_tokens: 1200
+    max_output_tokens: 16384
     response_mime_type: "application/json"
 
 system:
@@ -24,6 +24,8 @@ system:
     - Unit: normalize common unit (e.g., "g/dL", "mg/dL", "μmol/L"); if unknown, set unit=null and unit_normalized=null.
     - Flag computation: use reference_range if present (value < lower => "Low", value > upper => "High", else "Normal").
     - If ambiguous or multiple numeric candidates exist on one line, choose the most adjacent one and note ambiguity in errors.
+    - Errors: return at most 5 distinct, concise warnings (at most 160 characters each). Report each issue only once; use an empty array when there are no issues.
+    - If the report date cannot be determined, set date=null and report that issue at most once.
     - RETURN ONLY the JSON instance (the API will validate it against the schema). NOTHING ELSE.
   response_json_schema:
     title: "Blood test results schema"
@@ -90,6 +92,8 @@ system:
       errors:
         type: "array"
         title: "Extraction errors / warnings"
+        maxItems: 5
+        description: "Up to 5 distinct, concise warnings; an empty array if none."
         items:
           type: "string"
     required:

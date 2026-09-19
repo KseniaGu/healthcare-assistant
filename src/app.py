@@ -74,7 +74,7 @@ if page == "Process Report":
     with st.container():
         selected_model = st.selectbox(
             "Select Processing Model",
-            options=["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash", "gemini-3-pro"],
+            options=["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash", "gemini-3-pro"],
             index=0,
             help="Higher models provide better extraction accuracy but may be slower.",
         )
@@ -137,11 +137,13 @@ if page == "Process Report":
                         if context is not None:
                             os.remove(context.source_path)
                             st.session_state.pipeline_context = None
-                except (BaseLLMError, CriticalDatabaseSideError) as e:
+                except (BaseLLMError, CriticalDatabaseSideError, DocumentParsingError) as e:
+                    local_logger.exception("Report analysis failed")
                     st.error(e.user_message)
                     if e.is_retryable:
-                        st.button("🔄 Retry Extraction", on_click=st.rerun)
+                        st.info("Wait a moment, then click Confirm & Analyze again. Your reviewed document is still available.")
                 except LaboratoryTestProcessingError as e:
+                    local_logger.exception("Report processing failed")
                     st.error(e.user_message)
                 except Exception as e:
                     st.error("Analysis failed unexpectedly.")

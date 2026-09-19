@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import google.genai as genai
 from google.genai import types
@@ -8,17 +11,24 @@ from google.genai.types import GenerateContentResponse
 
 from backend.models.llm_clients.base import LLMClient, local_logger
 from backend.utils.common_funcs import write_file
-from backend.utils.exceptions import BaseLLMError
+from backend.utils.exceptions import BaseLLMError, IncompleteLLMResponseError
 from configs.enums import PromptTypeEnum
-from configs.models import GoogleGeminiSettings
-from configs.paths import PathSettings
+
+if TYPE_CHECKING:
+    from configs.models import GoogleGeminiSettings
+    from configs.paths import PathSettings
 
 
 class GeminiClient(LLMClient):
     def __init__(self, config: GoogleGeminiSettings, path_settings: PathSettings):
         super().__init__(config)
         self.path_settings = path_settings
-        self.client = genai.Client(api_key=config.api_key.get_secret_value())
+        self.client = genai.Client(
+            api_key=config.api_key.get_secret_value(),
+            http_options=types.HttpOptions(
+                retry_options=types.HttpRetryOptions(attempts=3, initial_delay=2, max_delay=8, http_status_codes=[503])
+            ),
+        )
 
     def _normalize_parameters(self) -> types.GenerateContentConfig:
         """Translates pydantic config fields into a native google-genai configuration object."""
@@ -29,6 +39,7 @@ class GeminiClient(LLMClient):
         config = types.GenerateContentConfig(
             temperature=self.config.temperature,
             max_output_tokens=self.config.max_tokens,
+            response_mime_type=self.config.response_mime_type,
             tools=tools,
         )
 
@@ -70,11 +81,7 @@ class GeminiClient(LLMClient):
 
             return processed_response
         else:
-            if response.candidates and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "text") and part.text:
-                        return part.text
-            return ""
+            return response.text or ""
 
     @staticmethod
     def _get_response_usage_metadata(response: GenerateContentResponse) -> dict:
@@ -111,28 +118,37 @@ class GeminiClient(LLMClient):
     ) -> (str | dict, dict, Path):
         """Executes the Gemini API call."""
         model_name = model_name if model_name is not None else self.config.model_name
-        if system_instruction is not None:
-            self.params.system_instruction = system_instruction
-        if response_json_schema is not None:
-            self.params.response_json_schema = response_json_schema
+        params = self.params.model_copy(
+            update={
+                "system_instruction": system_instruction,
+                "response_json_schema": response_json_schema,
+            }
+        )
         try:
             assert prompt is not None and prompt != ""
-            response = self.client.models.generate_content(model=model_name, contents=[prompt], config=self.params)
+            response = self.client.models.generate_content(model=model_name, contents=[prompt], config=params)
             parsed_response = self._get_response_content(response)
             usage_metadata = self._get_response_usage_metadata(response)
             raw_output_path = self.save_output(parsed_response, prompt_type, prompt_version)
+            if response.candidates and response.candidates[0].finish_reason == types.FinishReason.MAX_TOKENS:
+                raise IncompleteLLMResponseError(
+                    f"Gemini output exceeded max_output_tokens={params.max_output_tokens}; "
+                    f"increase GEMINI_MAX_TOKENS or split the report. Raw output: {raw_output_path}"
+                )
 
             return parsed_response, usage_metadata, raw_output_path
 
-        except AssertionError:
+        except BaseLLMError:
+            raise
+        except AssertionError as e:
             message = "Failed to generate content via Gemini client: prompt is empty"
             local_logger.error(message)
-            raise BaseLLMError(message)
+            raise BaseLLMError(message) from e
         except APIError as e:
             message = f"Failed to generate content via Gemini client. API error: {e}"
             local_logger.error(message)
-            raise BaseLLMError(message)
+            raise BaseLLMError(message) from e
         except Exception as e:
             message = f"An unexpected error occurred while generating content via Gemini client: {e}"
             local_logger.error(message)
-            raise BaseLLMError(message)
+            raise BaseLLMError(message) from e
