@@ -1,4 +1,5 @@
 import hashlib
+import math
 import mimetypes
 import os
 import re
@@ -7,6 +8,7 @@ import tempfile
 from langdetect import LangDetectException, detect_langs
 
 from backend.utils.schemas import *
+from configs.enums import TestFlagTypeEnum
 
 try:
     import requests
@@ -146,18 +148,36 @@ def is_valid_text(text: str, confidence_threshold: float = 0.8, common_words: se
 
 
 def process_test_value(test_value: str | float | int | None, common_inequalities: tuple) -> tuple[float | None, str]:
-    """Accepts JSON numbers/nulls or extract an inequality from a numeric string."""
+    """Project a scalar or numeric limit; leave qualitative values and ranges as text.
+
+    The caller stores the original value separately. Full-string matching prevents
+    ranges or descriptive text from becoming misleading numeric chart points.
+    """
     if test_value is None:
         return None, ""
-    if isinstance(test_value, bool):
-        raise ValueError("Test value is not numeric.")
+    if isinstance(test_value, bool) or not isinstance(test_value, (str, int, float)):
+        raise ValueError("Test value must be a string, number or null.")
     if isinstance(test_value, (int, float)):
-        return float(test_value), ""
-    if any(inequality in test_value for inequality in common_inequalities):
-        value = re.findall("\d+\.*\d*", test_value)
-        if value:
-            inequality = test_value.replace(value[0], "").strip()
-            return float(value[0]), inequality
-        else:
-            raise ValueError("Test value is not numeric.")
-    return float(test_value), ""
+        return (float(test_value), "") if math.isfinite(test_value) else (None, "")
+    qualifiers = "|".join(re.escape(value) for value in sorted(set(common_inequalities) | {"<=", ">="}, key=len, reverse=True))
+    number = r"[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?"
+    match = re.fullmatch(rf"\s*({qualifiers})?\s*({number})\s*", test_value.replace("−", "-"))
+    if match is None:
+        return None, ""
+    value = float(match[2].replace(",", "."))
+    return (value, match[1] or "") if math.isfinite(value) else (None, "")
+
+
+def observation_values(result: dict, common_inequalities: tuple) -> dict:
+    """Keeps original result text and derive only a conservative numeric projection."""
+    value = result.get("value")
+    numeric, qualifier = process_test_value(value, common_inequalities)
+    flag = str(result.get("flag") or "unknown").strip().lower()
+    return {
+        "observed_value": numeric,
+        "observed_value_text": None if value is None else str(value),
+        "observed_value_inequality": qualifier,
+        "unit": result.get("unit"),
+        "reference_range": result.get("reference_range"),
+        "flag": flag if flag in TestFlagTypeEnum.__members__ else "unknown",
+    }

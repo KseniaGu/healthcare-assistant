@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os.path
 from datetime import UTC, timezone
 
@@ -15,18 +14,17 @@ from backend.models.llm_clients.gemini import GeminiClient
 from backend.models.llm_clients.llama_parse import LlamaParseClient
 from backend.utils.common_funcs import get_logger, read_file, write_file
 from backend.utils.exceptions import *
+from backend.utils.extraction import parse_and_validate_extraction
 from backend.utils.helpers import (
-    clean_json_markdown,
     generate_artifact_meta,
     get_hash_and_size,
     is_valid_text,
-    process_test_value,
+    observation_values,
 )
 from backend.utils.prompt_engine import PromptEngine
 from backend.utils.schemas import *
 from configs.constants import (
     DATA_PROCESSING_LOGGING,
-    DEFAULT_LAB_TEST_NAME,
     GLINER_MAX_WINDOW_SIZE,
     GLINER_TOKENS_OVERLAP,
 )
@@ -290,14 +288,17 @@ class LaboratoryTestProcessor:
 
         logger_args = {"as_type": "generation", "name": "data_processor.generate"}
         with self.logger.start_as_current_observation(**logger_args) as generation_observation:
-            generation_observation.update(model=self.data_processor.config.model_name, model_parameters=model_settings)
+            actual_model = model_name or self.data_processor.config.model_name
+            generation_observation.update(
+                model=actual_model, model_parameters=self.data_processor.params.model_dump(exclude_none=True)
+            )
 
             try:
                 # Get model generation from the parsed document with laboratory test results
                 model_output, usage_metadata, raw_output_path = self.data_processor.generate(
                     prompt, prompt_type, prompt_version, **system_prompt, model_name=model_name
                 )
-                structured_output = json.loads(clean_json_markdown(model_output))
+                structured_output = parse_and_validate_extraction(model_output, system_prompt["response_json_schema"])
                 write_file(structured_output, output_path)
             except BaseLLMError:
                 raise
@@ -311,7 +312,7 @@ class LaboratoryTestProcessor:
         step_data = PipelineStepSchema(
             step_type=StepTypeEnum.process,
             tool_name=self.model_settings.data_processor.tool_name,
-            model_version=self.model_settings.data_processor.model_name,
+            model_version=actual_model,
             prompt_path=f"{prompt_type.value}/{prompt_version}.yaml",
             provider=self.model_settings.data_processor.provider,
             finished_at=datetime.now(UTC),
@@ -365,7 +366,7 @@ class LaboratoryTestProcessor:
     ):
         """Saves report (structured output obtained by the processor), extracts and saves test observations."""
         if isinstance(structured_output, dict):
-            report_results = {"results": structured_output.get("results", [])}
+            report_results = structured_output
             report_date = structured_output.get("date", None)
         elif isinstance(structured_output, list):
             report_results = {"results": structured_output}
@@ -390,31 +391,25 @@ class LaboratoryTestProcessor:
 
         # Extract and save test observations
         test_observations = []
-        for i, result in enumerate(report_results["results"]):
+        for result in report_results["results"]:
             try:
-                test_name = result.get("name", "")
-                if not test_name:
-                    test_name = f"{DEFAULT_LAB_TEST_NAME}_{report.uuid}_{i}"
-                    message = f"Test with unknown name. Report uuid: {report.uuid}"
+                test_name = result.get("name") or result.get("test_name")
+                if not isinstance(test_name, str) or not test_name.strip():
+                    message = f"Skipped observation with missing test name. Report uuid: {report.uuid}"
                     local_logger.warning(message)
                     self.logger.update_current_span(level="WARNING", status_message=message)
+                    continue
 
                 test_catalog_data = TestCatalogSchema(
-                    canonical_name=test_name, preferred_unit=result.get("units_normalized")
+                    canonical_name=test_name, preferred_unit=result.get("unit_normalized")
                 )
                 test_catalog_id = await self.database.get_test_catalog_id(test_catalog_data)
-                test_value, inequality = process_test_value(result.get("value"), self.data_settings.common_inequalities)
-
                 test_observation = TestObservationSchema(
                     test_catalog_id=test_catalog_id,
                     report_id=report.id,
                     patient_id=patient_id,
                     test_name=test_name,
-                    observed_value=test_value,
-                    observed_value_inequality=inequality,
-                    unit=result.get("units"),
-                    flag=TestFlagTypeEnum[result.get("flag", "").lower()].name,
-                    reference_range=result.get("reference_range"),
+                    **observation_values(result, self.data_settings.common_inequalities),
                     observation_date=report_date,
                     created_at=processed_at,
                 )

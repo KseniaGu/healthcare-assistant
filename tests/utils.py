@@ -18,17 +18,13 @@ async def check_reports(database: PostgreSQLDB, testing_settings: TestingSetting
     last_report = all_reports[-1]
     results = last_report.raw_json["results"]
 
-    mismatch_message = "Database observation %s mismatch"
+    assert len(results) == len(testing_settings.test_user_observation_names)
     for i, result in enumerate(results):
         for key in ("name", "value", "unit", "reference_range"):
-            try:
-                result[key] = drop_space(result[key]) if key != "name" else result[key]
-                equality = re.match(getattr(testing_settings, f"test_user_observation_{key}s")[i], result[key])
-                assert equality, mismatch_message % key
-            except KeyError as e:
-                if "'unit'" in e:
-                    equality = result["units"] == getattr(testing_settings, f"test_user_observation_{key}s")[i]
-                    assert equality, mismatch_message % key
+            actual = str(result[key])
+            actual = drop_space(actual) if key != "name" else actual
+            expected = getattr(testing_settings, f"test_user_observation_{key}s")[i]
+            assert re.fullmatch(expected, actual), f"Database row {i}, {key} mismatch"
 
 
 async def check_test_observations(database: PostgreSQLDB, testing_settings: TestingSettings):

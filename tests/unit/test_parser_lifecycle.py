@@ -82,10 +82,20 @@ class ObservationValueTests(unittest.TestCase):
             ("3.5", (3.5, "")),
             ("< 3.0", (3.0, "<")),
             ("≥ 2.5", (2.5, "≥")),
+            ("<= -2,50", (-2.5, "<=")),
+            ("4,50", (4.5, "")),
+            ("1.2e-3", (0.0012, "")),
+            ("−3.0", (-3.0, "")),
+            ("0-1", (None, "")),
+            ("negative", (None, "")),
+            ("pending", (None, "")),
+            ("about < 3", (None, "")),
+            ("< 3-5", (None, "")),
+            ("1e999", (None, "")),
         ):
             with self.subTest(value=value):
                 self.assertEqual(process_test_value(value, ("<", ">", "≤", "≥", "~", "≈")), expected)
-        for value in (True, "pending"):
+        for value in (True, [], {}):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 process_test_value(value, ("<", ">"))
 

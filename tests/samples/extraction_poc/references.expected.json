@@ -1,0 +1,36 @@
+{
+  "date": "2025-04-14",
+  "results": [
+    {
+      "name": "Клетки Дельта",
+      "value": "0-2",
+      "unit": "в п/зр",
+      "reference_range": "0-6"
+    },
+    {
+      "name": "Реакция Эпсилон",
+      "value": "отрицательно",
+      "unit": null,
+      "reference_range": "отрицательно"
+    },
+    {
+      "name": "Реакция Плюс",
+      "value": "+",
+      "unit": null,
+      "reference_range": "отрицательно"
+    },
+    {
+      "name": "Маркер Дзета",
+      "value": "6.40",
+      "unit": "ммоль/л",
+      "reference_range": "см.комм"
+    },
+    {
+      "name": "Аллерген Эта",
+      "value": "0.80",
+      "unit": "МЕ/мл",
+      "reference_range": null
+    }
+  ],
+  "errors": []
+}

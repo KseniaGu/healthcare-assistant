@@ -114,6 +114,7 @@ class TestObservationSchema(BaseModel):
     test_catalog_id: int | None = None
     test_name: str | None = None
     observed_value: float | None = None
+    observed_value_text: str | None = None
     observed_value_inequality: str | None = None
     unit: str | None = None
     flag: str | None = None

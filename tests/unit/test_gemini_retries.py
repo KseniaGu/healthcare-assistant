@@ -16,8 +16,8 @@ from backend.utils.exceptions import BaseLLMError
 
 class GeminiRetryTests(unittest.TestCase):
     def test_transient_recovery_exhaustion_and_non_retryable_errors(self):
-        for statuses in ([503, 200], [503, 503, 503], [400]):
-            with self.subTest(statuses=statuses), tempfile.TemporaryDirectory() as directory:
+        for statuses, attempts in (([503, 200], 3), ([503, 503, 503], 3), ([400], 3), ([503], 1)):
+            with self.subTest(statuses=statuses, attempts=attempts), tempfile.TemporaryDirectory() as directory:
                 calls = []
 
                 def respond(request, statuses=statuses, calls=calls):
@@ -46,7 +46,9 @@ class GeminiRetryTests(unittest.TestCase):
                         response_mime_type="application/json",
                     )
                     with patch("backend.models.llm_clients.gemini.genai.Client", side_effect=create_client):
-                        client = GeminiClient(config, SimpleNamespace(llm_outputs_dir=Path(directory)))
+                        client = GeminiClient(
+                            config, SimpleNamespace(llm_outputs_dir=Path(directory)), retry_attempts=attempts
+                        )
                     try:
                         with patch("time.sleep"):
                             if statuses[-1] == 200:

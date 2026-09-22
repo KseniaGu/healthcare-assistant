@@ -29,6 +29,7 @@ artifacts/
 models_cache/
 docs/*
 !docs/project_overview.md
+!docs/application_guide.md
 
 # Environment
 .env

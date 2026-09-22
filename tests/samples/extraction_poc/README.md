@@ -1,0 +1,25 @@
+# Synthetic extraction development fixtures
+
+These three parser-text examples contain no patient documents or organization
+layouts. Expected outputs were authored before live testing. They are development
+cases, not evidence of held-out generalization.
+
+| Case | Checks |
+| --- | --- |
+| `scalars` | Collection-date precedence, historical columns, raw units, precision, decimal commas and inequalities |
+| `references` | Examination-date fallback, measured/reference intervals, qualitative results, pointers, shared units and allergy classes |
+| `omissions` | Referral-date fallback, unnamed rows, incomplete references, pending tests and a cover referral to panel measurements |
+
+Compare predictions with each `.expected.json`: dates, ordered records and all
+result fields should match. Warning wording may vary, but the omission warning must
+identify missing names and incomplete references without inventing causes. Schema
+validity alone is insufficient.
+
+See [prompt evaluation](../../../docs/prompt_evaluation.md) for the v3/v4 development
+history, the remaining synthetic-warning limitation, real-report results, runner
+commands and quota rules. The original nine-attempt development budget is exhausted;
+do not create a fresh ledger to repeat it. Real-report evaluation later proceeded
+under separate authorization after review decisions were resolved.
+
+For the next research stage, see the
+[small-model training plan](../../../docs/llm_training_experiment.md).

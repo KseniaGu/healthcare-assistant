@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -19,6 +18,7 @@ from configs.data import DataSettings
 from configs.database import PostgreSQLSettings
 from configs.models import ModelSettings
 from configs.paths import PathSettings
+from src.web.observations import chartable_observations, observations_dataframe
 
 # Page Configuration
 st.set_page_config(
@@ -74,7 +74,14 @@ if page == "Process Report":
     with st.container():
         selected_model = st.selectbox(
             "Select Processing Model",
-            options=["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3-flash", "gemini-3-pro"],
+            options=[
+                "gemini-3.1-flash-lite",
+                "gemini-3.8-flash",
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-flash",
+                "gemini-3-flash",
+                "gemini-3-pro",
+            ],
             index=0,
             help="Higher models provide better extraction accuracy but may be slower.",
         )
@@ -141,7 +148,9 @@ if page == "Process Report":
                     local_logger.exception("Report analysis failed")
                     st.error(e.user_message)
                     if e.is_retryable:
-                        st.info("Wait a moment, then click Confirm & Analyze again. Your reviewed document is still available.")
+                        st.info(
+                            "Wait a moment, then click Confirm & Analyze again. Your reviewed document is still available."
+                        )
                 except LaboratoryTestProcessingError as e:
                     local_logger.exception("Report processing failed")
                     st.error(e.user_message)
@@ -168,67 +177,67 @@ elif page == "Lab Test Dynamics":
     if not observations:
         st.warning("No data found. Please process a report first.")
     else:
-        data = []
-        for obs in observations:
-            data.append(
-                {
-                    "Test": obs.test_name,
-                    "Value": obs.observed_value,
-                    "Date": (obs.observation_date or obs.created_at).date(),
-                    "Flag": obs.flag.value if obs.flag else "NORMAL",
-                }
-            )
-        dataframe = pd.DataFrame(data)
-
+        dataframe = observations_dataframe(observations)
         col_filter, col_chart = st.columns([1, 3])
 
         with col_filter:
             st.write("### Filter Analysis")
+            dated = dataframe["Date"].dropna()
+            filtered = dataframe
+            if not dated.empty:
+                date_range = st.date_input(
+                    "Select Date Range",
+                    value=(dated.min(), dated.max()),
+                    key="dynamics_page_date_range",
+                )
+                if isinstance(date_range, tuple) and len(date_range) == 2:
+                    start, end = date_range
+                    filtered = dataframe[dataframe["Date"].isna() | dataframe["Date"].between(start, end)]
+                else:
+                    st.info("Select both dates to filter the results.")
+            available_tests = sorted(filtered["Test"].dropna().unique())
+            selected_tests = st.multiselect("Select Tests", options=available_tests, key="dynamics_page_test_select")
 
-            date_range = st.date_input(
-                "Select Date Range",
-                value=(dataframe["Date"].min(), dataframe["Date"].max()),
-                key="dynamics_page_date_range",
-            )
-
-            if isinstance(date_range, tuple) and len(date_range) == 2:
-                start, end = date_range
-                available_tests = dataframe[dataframe["Date"].between(start, end)]["Test"].unique()
-            else:
-                available_tests = []
-
-            selected_tests = st.multiselect(
-                "Select Tests", options=sorted(available_tests), key="dynamics_page_test_select"
-            )
-
-            # Final filtered dataset
-            if len(available_tests) > 0 and selected_tests:
-                mask = (dataframe["Date"].between(start, end)) & (dataframe["Test"].isin(selected_tests))
-                f_df = dataframe[mask].sort_values("Date")
-
-                with col_chart:
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Data Points", len(f_df), border=True)
-                    m2.metric("Critical Flags", len(f_df[f_df["Flag"] != "NORMAL"]), border=True)
-                    m3.metric("Latest Visit", f_df["Date"].max().strftime("%Y-%m-%d"), border=True)
-
+        with col_chart:
+            if selected_tests:
+                selected = filtered[filtered["Test"].isin(selected_tests)].sort_values("Date")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Results", len(selected), border=True)
+                m2.metric("High / low flags", int(selected["Flag"].isin(["high", "low"]).sum()), border=True)
+                latest = selected["Date"].dropna().max()
+                m3.metric(
+                    "Latest Report",
+                    latest.strftime("%Y-%m-%d") if hasattr(latest, "strftime") else "Unknown",
+                    border=True,
+                )
+                plotted = chartable_observations(selected)
+                if not plotted.empty:
                     fig = px.line(
-                        f_df,
+                        plotted,
                         x="Date",
-                        y="Value",
-                        color="Test",
+                        y="Numeric value",
+                        color="Series",
                         markers=True,
+                        hover_data=["Result", "Unit", "Reference", "Flag"],
                         template="plotly_white",
                         title="Biomarker Progression",
                     )
                     fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
+                else:
+                    st.info(
+                        "These results are available in the table below; there are no dated numeric measurements to chart."
+                    )
             else:
-                with col_chart:
-                    st.info("No laboratory tests match the selected date criteria.")
-
-        with st.expander("🔍 Clinical Data Grid"):
-            st.dataframe(dataframe.sort_values("Date", ascending=False), use_container_width=True)
+                selected = filtered
+                st.info("Select tests to view their numeric trends.")
+            st.caption(
+                "Charts show exact numeric measurements with known dates. Text results, ranges and limits remain in the table. Different units use separate series. Unknown flags are not counted as high or low."
+            )
+            st.dataframe(
+                selected[["Test", "Result", "Unit", "Reference", "Date", "Flag"]].sort_values("Date", ascending=False),
+                width="stretch",
+            )
 
 # TODO: Only for admin account
 elif page == "System Logs":

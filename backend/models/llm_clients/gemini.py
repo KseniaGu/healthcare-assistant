@@ -20,13 +20,15 @@ if TYPE_CHECKING:
 
 
 class GeminiClient(LLMClient):
-    def __init__(self, config: GoogleGeminiSettings, path_settings: PathSettings):
+    def __init__(self, config: GoogleGeminiSettings, path_settings: PathSettings, *, retry_attempts: int = 3):
         super().__init__(config)
         self.path_settings = path_settings
         self.client = genai.Client(
             api_key=config.api_key.get_secret_value(),
             http_options=types.HttpOptions(
-                retry_options=types.HttpRetryOptions(attempts=3, initial_delay=2, max_delay=8, http_status_codes=[503])
+                retry_options=types.HttpRetryOptions(
+                    attempts=retry_attempts, initial_delay=2, max_delay=8, http_status_codes=[503]
+                )
             ),
         )
 

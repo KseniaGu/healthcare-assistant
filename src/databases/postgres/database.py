@@ -172,7 +172,8 @@ class PostgreSQLDB:
     ) -> TestCatalog.id | None:
         """Gets test catalog id. If no test found and <to_add> is True, adds new test."""
         # TODO: Make test name unification
-        result = await self.select(TestCatalog, test_data)
+        # Catalog identity is its unique name; a changed/absent unit must not create a duplicate.
+        result = await self.select(TestCatalog, TestCatalogSchema(canonical_name=test_data.canonical_name))
         result = result.first()
         if result:
             return result.id

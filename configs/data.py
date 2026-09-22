@@ -18,7 +18,7 @@ class DataSettings(BaseSettings):
     pii_prediction_threshold: float = 0.4
 
     # Data processing
-    prompt_version: str = "v3"
+    prompt_version: str = "v4"
 
     # Text validation
     common_words: set = {

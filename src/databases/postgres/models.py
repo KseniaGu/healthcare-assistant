@@ -100,7 +100,8 @@ class TestObservation(Base):
         report_id: Reference to the report containing this observation.
         patient_id: Reference to the patient this observation belongs to.
         test_name: Name of the test as it appears in the report.
-        observed_value: Numeric result of the test.
+        observed_value: Numeric projection for scalar results or limits.
+        observed_value_text: Original value, including precision, ranges and qualitative text.
         unit: Unit of measurement for the observed value.
         flag: Indicates if the result is high, low or normal.
         reference_range: Normal range for the test result.
@@ -117,6 +118,7 @@ class TestObservation(Base):
 
     test_name: Mapped[str | None] = mapped_column(String(256), index=True, nullable=True)
     observed_value: Mapped[float | None] = mapped_column(nullable=True)
+    observed_value_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     observed_value_inequality: Mapped[str | None] = mapped_column(String(4), nullable=True)
     unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     flag: Mapped[TestFlagTypeEnum | None] = mapped_column(

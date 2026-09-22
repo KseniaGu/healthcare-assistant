@@ -1,78 +1,60 @@
 # Healthcare Assistant
 
-*A small project is still under development.*\
-AI-based tool for processing personal medical data. Currently, this assistant is only capable of processing laboratory
-test results.
+Healthcare Assistant turns personal laboratory PDFs into structured results you can
+review and track over time. It is a Streamlit application under active development,
+currently focused on laboratory reports and a single patient profile.
 
----
+The app helps redact personal information locally, asks you to review the document,
+then uses LlamaParse and Gemini to extract results. PostgreSQL stores the reports
+and observations. The current extraction default is **prompt v4** with
+`gemini-3.1-flash-lite`.
 
-## The basic pipeline
+## Get started
 
-The basic pipeline currently implemented is as follows:
+Use Docker and the VS Code Dev Containers extension for the supported development
+setup. Create a root `.env` using `.env.example`, configure the API credentials and
+database settings, and select **Dev Containers: Reopen in Container**. Follow the
+[application guide](docs/application_guide.md) for the exact setup and prerequisites.
 
-1. The system runs Named Entity Recognition (NER) to analyze an uploaded document and extract and mask any personal
-   information (PII) data.
-2. An anonymized document is then passed to a parser, which extracts laboratory test results into a proper text format.
-3. The parsed medical data is then processed by an LLM to generate a structured output, which is saved for further
-   analysis (e.g., test dynamics monitoring).
+From the container terminal:
 
----
+```sh
+poetry run streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501
+```
 
-## Tech stack
+Open the forwarded port **8501** in your browser. Existing installations should
+check the [v4 upgrade instructions](docs/v4_application_update.md#upgrading-an-existing-database)
+before starting the updated app.
 
-- **Frontend:** [Streamlit](https://streamlit.io/)
-- **DL/AI Engine**:
-    - Tested at the current pipeline: [GLiNER](https://github.com/urchade/GLiNER) (local
-      weights), [LlamaParse](https://www.llamaindex.ai/llamaparse) (API), [Google Gemini](https://gemini.google.com/) (
-      API)
-    - Alternative pipeline steps to test in the
-      future: [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR?ysclid=mjelp06ui4625881594) (both: parse and extract
-      structured output), [OpenAI models](https://platform.openai.com/docs/models?ref=robkerr.ai) (process parsed
-      documents)
-- **Database:** [PostgreSQL](https://www.postgresql.org/) (psycopg
-  3) + [SQLAlchemy](https://www.sqlalchemy.org/) + [Alembic](https://alembic.sqlalchemy.org/en/latest/index.html)
+## Use the app
 
----
+1. Open **Process Report**, upload a laboratory PDF, and click **Start Anonymization**.
+2. Inspect the redacted PDF carefully. Choose **Reject / Delete** if it is unsuitable,
+   or **Confirm & Analyze** to send it for parsing and extraction.
+3. Review the structured results and any extraction warnings.
+4. Open **Lab Test Dynamics** to browse the results table, filter by date and test,
+   and view numeric trends.
 
-## Prepare environment
+❗ **Review before confirming:** redaction can miss personal information. LlamaParse
+receives the reviewed PDF and Gemini receives the parsed text. This is an
+experimental personal-data tool, not a validated clinical decision system.
 
-It's better to pre-download [GLiNER model weights](https://huggingface.co/urchade/gliner_multi-v2.1) from Hugging Face
-Hub to ensure the container doesn't download them at runtime. After the model has been downloaded to the local HF cache
-folder:
+The table includes numeric, qualitative, and measured-range results. Charts show
+only exact numeric measurements with known dates; limits and text stay in the table.
+Different units use separate series. An unknown flag does not mean a normal result.
 
-- Create a `models_cache` folder in the root of the project.
-- Copy local HuggingFace hub files into it: `cp -r ~/.cache/huggingface/* ./models_cache/`
+![Document review and processing](src/web/public/report_processing.png)
 
-Environment variables should be configured in the `.env` file (in the root directory) – see the `.env.example` file for
-details.
+![Laboratory result trends](src/web/public/observations_dynamics_monitoring.png)
 
-To manage Alembic migrations, create an `alembic.ini` file (in the root directory). For more details, please refer to
-the [documentation](https://alembic.sqlalchemy.org/en/latest/tutorial.html#tutorial-alembic-ini).
+Screenshots illustrate the workflow and may predate the latest interface changes.
 
---- 
+## Documentation
 
-## Local OCR fallback
-
-Unreadable PDF text is retried with local PyMuPDF/Tesseract OCR in Russian and English
-at 300 DPI. OCR coordinates are used to locate PII for redaction. No document data is
-sent to an external OCR service. If OCR fails or remains unreadable, the existing
-manual-review flow still applies. Existing image masking is unchanged: a scanned
-page stored as a single image may be fully masked.
-
-The Docker images install Tesseract and both language packs; rebuild the container
-after updating the Dockerfile.
-
-## Examples
-
-- Upload the document with laboratory test results.
-
-  ❗**Important**: carefully check the anonymized version of the document before accepting processing! Only process if
-  all personally identifiable information (PII) data has been masked – results will be shared with the public LLM API.
-
-  *The actual values are hidden manually to prevent them from being publicly displayed.*
-
-![Alt text](src/web/public/report_processing.png)
-
-- Monitor saved test results and their dynamics.
-
-![Alt text](src/web/public/observations_dynamics_monitoring.png)
+| Guide | What it covers |
+| --- | --- |
+| [Application guide](docs/application_guide.md) | Setup, daily use, configuration, and troubleshooting |
+| [Project overview](docs/project_overview.md) | Architecture, components, data flow, and limitations |
+| [v4 application update](docs/v4_application_update.md) | Storage/display changes, database migration, recovery scripts, and verification |
+| [Prompt evaluation](docs/prompt_evaluation.md) | v3/v4 contract, recorded results, and fresh-run tooling |
+| [Small-model training experiment](docs/llm_training_experiment.md) | Motivation, proposed dataset strategy, baselines, training, and evaluation |

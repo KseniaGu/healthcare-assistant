@@ -1,13 +1,10 @@
-import json
 import re
 
-import jsonschema
 import pytest
-from jsonschema import ValidationError, validate
 
 from backend.models.llm_clients.gemini import GeminiClient
 from backend.utils.common_funcs import read_file
-from backend.utils.helpers import clean_json_markdown
+from backend.utils.extraction import parse_and_validate_extraction
 from backend.utils.prompt_engine import PromptEngine
 from configs.data import DataSettings
 from configs.enums import PromptTypeEnum
@@ -46,30 +43,15 @@ def test_document_processing(gemini_model, prompt_metadata):
     )
 
     assert isinstance(model_output, str), "Gemini client produced output of the wrong type (str excepted)"
-    try:
-        structured_output = json.loads(clean_json_markdown(model_output))
-    except json.JSONDecodeError as e:
-        pytest.fail(f"Gemini produced invalid JSON syntax: {e}\nOutput was: {model_output}")
-
-    structured_output_to_validate = structured_output
-    if isinstance(structured_output, list):
-        structured_output_to_validate = {"date": None, "results": structured_output}
-
-    try:
-        validate(
-            instance=structured_output_to_validate,
-            schema=system_prompt["response_json_schema"],
-            format_checker=jsonschema.FormatChecker(),
-        )
-    except ValidationError as e:
-        pytest.fail(f"Gemini's produced output doesn't match the schema: {e}")
-
-    mismatch_message = "Expected first test to be '%s', got '%s'"
-    for key in ("name", "value", "reference_range"):
-        first_output = structured_output[0][key]
-        first_output = drop_space(first_output) if key != "name" else first_output
-        expected_result = getattr(testing_settings, f"test_user_observation_{key}s")[0]
-        assert re.match(expected_result, first_output), mismatch_message % (expected_result, first_output)
+    structured_output = parse_and_validate_extraction(model_output, system_prompt["response_json_schema"])
+    results = structured_output["results"]
+    assert len(results) == len(testing_settings.test_user_observation_names)
+    for index, result in enumerate(results):
+        for key in ("name", "value", "unit", "reference_range"):
+            actual = str(result[key])
+            actual = drop_space(actual) if key != "name" else actual
+            expected = getattr(testing_settings, f"test_user_observation_{key}s")[index]
+            assert re.fullmatch(expected, actual), f"Row {index}, {key}: expected {expected!r}, got {actual!r}"
 
     # Rename output path to mark the file as testing
     new_raw_output_path = raw_output_path.with_name(raw_output_path.stem + "_test" + raw_output_path.suffix)

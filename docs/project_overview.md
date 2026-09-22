@@ -30,7 +30,8 @@ PDF upload → local redaction → user reviews PDF → LlamaParse API
    invokes both stages directly and does not provide interactive review.
 3. **Extraction:** LlamaParse converts the reviewed PDF to text. A versioned YAML
    prompt, rendered with Jinja2, supplies Gemini's instructions and response schema.
-   The processor parses the response as JSON and saves intermediate outputs locally.
+   The processor parses and locally validates fresh responses against the selected
+   prompt schema before saving processed JSON. Raw failed responses are retained.
 4. **Persistence and display:** the backend saves the report and individual
    observations, including values, inequalities, units, reference ranges, and flags.
    The dynamics page filters by date and test name and displays pandas/Plotly charts.
@@ -47,17 +48,14 @@ PDF upload → local redaction → user reviews PDF → LlamaParse API
 | [src/databases/postgres](../src/databases/postgres) | SQLAlchemy models, async repository methods, transaction decorator, Alembic seeds |
 | [configs](../configs) | Pydantic settings for models, paths, processing, database, and tests |
 
-The stack is Python 3.11–3.13 with Poetry, Streamlit, PyMuPDF/Tesseract, GLiNER and
-Transformers, LlamaParse, Google GenAI, PostgreSQL/SQLAlchemy/psycopg, and Langfuse
-tracing. [pyproject.toml](../pyproject.toml) defines dependency constraints. OpenAI
-settings and PaddleOCR references are future-facing; the active pipeline instantiates
-LlamaParse and Gemini directly.
+The stack is Python 3.11–3.13 with Poetry, [Streamlit](https://streamlit.io/), [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/)/[Tesseract](https://github.com/tesseract-ocr/tesseract), [GLiNER](https://github.com/urchade/GLiNER) and [Transformers](https://github.com/huggingface/transformers), [LlamaParse](https://www.llamaindex.ai/llamaparse), [Google GenAI](https://github.com/googleapis/python-genai), [PostgreSQL](https://www.postgresql.org/)/[SQLAlchemy](https://www.sqlalchemy.org/)/[psycopg](https://www.psycopg.org/), and [Langfuse](https://github.com/langfuse/langfuse) tracing. [pyproject.toml](../pyproject.toml) defines dependency constraints. OpenAI settings and [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR?ysclid=mjelp06ui4625881594) references are future-facing; the active pipeline instantiates LlamaParse and Gemini directly.
 
 Current extraction defaults are explicit in the code:
 
 | Consumer | Prompt selection | Model default |
 | --- | --- | --- |
-| Pipeline and Gemini behavior test | `DataSettings.prompt_version = "v3"` | `gemini-3.1-flash-lite` |
+| Pipeline and Gemini behavior test | `DataSettings.prompt_version = "v4"` | `gemini-3.1-flash-lite` |
+| Standalone extraction baseline runner | CLI `--prompt-version`, default `v4` | Configured processor model; explicit `--model` override |
 | Direct `GeminiClient.generate()` calls omitting arguments | `prompt_version="v1"` | Configured Gemini model |
 
 The UI can override the generation model, but prompt selection is not model-specific.
@@ -75,13 +73,35 @@ entire processing run is not one atomic transaction.
 [PathSettings](../configs/paths.py) creates directories under `data/` for raw,
 redacted, parsed, processed, and raw LLM outputs. Existing output paths can cause
 stages to be skipped; account for cached artifacts when retesting prompts or OCR.
+The standalone `backend.data_processing.run_extraction_baseline` CLI always uses a
+new output directory, explicit parser inputs, local schema validation, and a shared
+nine-attempt development budget. It bypasses PDF processing and database caching.
+See [prompt evaluation and runner usage](prompt_evaluation.md#fresh-run-tooling).
+
+Reports retain complete extraction JSON, including dates and errors. Observation
+persistence uses `unit`, catalog preferences use `unit_normalized`, unnamed rows
+are skipped, and absent/unrecognized flags become unknown. Observations preserve original
+values in `observed_value_text` and project only scalar numbers into `observed_value`.
+Qualitative results and measured ranges are stored with a null numeric projection.
+The results table shows all value types; charts include only exact scalar measurements
+with known dates and keep different units in separate series. Unknown flags do not
+count as high/low results. Catalog identity is the unique test name, independent of
+optional normalized-unit preferences.
+
+The additive `c84d120a6e31` migration adds the nullable text column. The standalone
+`backend.data_processing.restore_observations` command previews recovery from stored
+JSON; `--apply` commits it. It restores missing rows and raw text/units, repairs
+identifiable legacy placeholder names, and skips ambiguous/unnamed/pending rows.
+Existing numeric measurements, flags, dates, and report JSON remain unchanged.
+This repair never calls an LLM and is not a fresh v4 extraction baseline.
+
 Successful UI processing deletes the temporary upload but retains downstream
 artifacts. There is no general retention/cleanup policy implemented.
 
 Database startup defaults to `ENV=DEV`: it creates the `uuid-ossp` extension and
 ORM tables, then runs Alembic when `POSTGRES_AUTO_MIGRATE` is enabled. The checked-in
-revisions seed a pipeline and patient; they are not a complete schema migration
-history. Outside DEV, this constructor does not initialize the schema.
+revisions seed a pipeline and patient and add the observation text column; they are
+not a complete initial-schema migration history. Outside DEV, this constructor does not initialize the schema.
 
 ## Development and setup
 
@@ -108,14 +128,16 @@ poetry run streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501
 `poetry.lock` is currently gitignored. If installation reports it is stale after
 manifest edits, Poetry 1.8 supports `poetry lock --no-update`, followed by reinstalling.
 A failed post-create install can leave a rebuilt container without `streamlit`.
-Both Dockerfiles install Tesseract with Russian/English language data; native macOS
-needs the Homebrew setup described in README.
+Both Dockerfiles install Tesseract with Russian/English language data. See the
+[application guide](application_guide.md) for setup prerequisites and daily usage.
 
 [VS Code launch configurations](../.vscode/launch.json) support the current Python
 file and the Streamlit app. Both set the workspace root as `cwd` and `PYTHONPATH`
 to resolve `backend` imports.
 
 ## Tests and current limits
+
+Offline regressions run with `LANGFUSE_TRACING_ENABLED=false HF_HUB_OFFLINE=1 poetry run python -m unittest discover -s tests/unit -v`; they mock external work and avoid processor initialization.
 
 Run `poetry run pytest` only with an isolated test database configured through
 `POSTGRES_TEST_DATABASE_NAME`. Model behavior tests call real APIs; the integration
@@ -137,3 +159,10 @@ directories; these are not side-effect-free offline checks.
 - **Results need validation.** Observation conversion errors are logged and skipped,
   and test-name unification remains a TODO. Extraction and charting are still under
   development, not a validated clinical decision system.
+
+## Related guides
+
+- [Application setup and usage](application_guide.md)
+- [v4 storage update, migration and historical recovery](v4_application_update.md)
+- [Prompt contract, evaluation results and runner](prompt_evaluation.md)
+- [Proposed small-model training experiment](llm_training_experiment.md)
