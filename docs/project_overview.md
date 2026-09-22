@@ -55,7 +55,8 @@ Current extraction defaults are explicit in the code:
 | Consumer | Prompt selection | Model default |
 | --- | --- | --- |
 | Pipeline and Gemini behavior test | `DataSettings.prompt_version = "v4"` | `gemini-3.1-flash-lite` |
-| Standalone extraction baseline runner | CLI `--prompt-version`, default `v4` | Configured processor model; explicit `--model` override |
+| Standalone Gemini baseline runner | CLI `--prompt-version`, default `v4` | Configured processor model; explicit `--model` override |
+| Local Qwen experiment | Frozen `v4` revision 4.1 | Pinned `qwen3:4b-instruct-2507-q8_0` through host Ollama |
 | Direct `GeminiClient.generate()` calls omitting arguments | `prompt_version="v1"` | Configured Gemini model |
 
 The UI can override the generation model, but prompt selection is not model-specific.
@@ -77,6 +78,11 @@ The standalone `backend.data_processing.run_extraction_baseline` CLI always uses
 new output directory, explicit parser inputs, local schema validation, and a shared
 nine-attempt development budget. It bypasses PDF processing and database caching.
 See [prompt evaluation and runner usage](prompt_evaluation.md#fresh-run-tooling).
+The separate `backend.data_processing.evaluate_local_extraction` CLI freezes reviewed
+targets, runs a bounded local Qwen experiment, and scores saved responses offline.
+Its A+C development split reserves B from inference and scoring. It leaves the
+application defaults and Gemini budget unchanged; see the
+[local experiment record](prompt_evaluation.md#local-untuned-qwen-evaluation).
 
 Reports retain complete extraction JSON, including dates and errors. Observation
 persistence uses `unit`, catalog preferences use `unit_normalized`, unnamed rows

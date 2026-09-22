@@ -104,3 +104,24 @@ Historical flags may still be present; unknown does not mean normal.
 The current text validation expects Russian reports. English OCR availability does
 not imply full English extraction support. See [current limits](project_overview.md#tests-and-current-limits)
 for additional operational constraints.
+
+## Standalone local extraction experiment
+
+The evaluation client runs inside the devcontainer; Ollama runs natively on macOS
+and uses the host GPU. Start the Mac Ollama application before using the evaluator.
+The verified container endpoint is `http://host.orb.internal:11434`; container
+`localhost` refers to the container, not the Mac. No public network exposure or
+additional container Ollama installation is needed for the verified connection.
+
+This experiment pins Ollama 0.33.2 and the already-installed
+`qwen3:4b-instruct-2507-q8_0` package. It requests 32K context per API call regardless
+of the application's context slider. Run it using Poetry; commands and safeguards
+are in [prompt evaluation](prompt_evaluation.md#local-untuned-qwen-evaluation).
+Neither the application's Gemini default nor LlamaParse changes.
+
+Run only one evaluation client, keep the Mac awake and avoid other Ollama workloads
+during the batch. The runner records Ollama allocation snapshots and durations;
+macOS Activity Monitor can supplement those with memory pressure observations, but
+container memory is not host model memory. Dataset packets, predictions and review
+reports remain under gitignored `data/`. The devcontainer's data volume masks host
+data, so a host-side workflow would require an explicit local export.
