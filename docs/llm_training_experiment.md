@@ -1,7 +1,7 @@
 # Small-model structured-extraction experiment
 
-Status as of 2026-09-22: **Gemini baseline and first untuned local Qwen evaluation complete;
-training not started**. The first evaluation and organization split are implemented;
+Status as of 2026-09-23: **Gemini and bounded local Qwen/Qwen3.5 comparisons complete;
+training not started**. The evaluation and organization split are implemented;
 subsequent synthetic-data generation and SFT remain proposed work.
 
 ## Question and scope
@@ -168,6 +168,49 @@ under the frozen configuration, not a claim about Qwen's maximum performance.
 
 The local source-backed assessment is
 `data/extraction_poc/qwen-untuned-v1/assessment.md`; detailed scores and hash-bound
-warning adjudications are alongside it. The next decision is whether to undertake
-small SFT using A+C only. B stays reserved. The baseline is finished and must not
+warning adjudications are alongside it. The subsequent model comparison is recorded
+below. B stays reserved. The baseline is finished and must not
 be rerun merely to obtain a better answer or bypass its execution ledger.
+
+## Follow-up before a training decision
+
+The user approved a bounded comparison of installed Qwen3.5 4B MLX and 9B models
+before committing to SFT. This supersedes the immediate next-step suggestion to
+start training after the first Qwen3 result. Use the same A+C development packet;
+B remains reserved. Two deterministic runs and at most one thinking-enabled run
+of the better usable candidate are allowed, with no prompt edits or new datasets.
+The protocol, settings and independent request ledgers are documented in
+[prompt evaluation](prompt_evaluation.md#authorized-qwen35-comparison).
+
+
+### Completed comparison and training recommendation — 2026-09-23
+
+The follow-up completed 24 local generation requests: 4B MLX with original
+constraints, 9B non-thinking, compatibility-corrected 4B, and selected 4B thinking.
+The initial MLX result was confounded by one-character names caused by decoding
+pattern handling. A separately recorded amendment removed only that decoding
+constraint; full frozen-schema validation and all labels remained unchanged.
+
+Corrected 4B non-thinking matched 70/123 records and 3/5 dates; 9B matched 64/123
+and 5/5. 9B recovered all 123 named observations but added a cover row and confused
+allergy classes with references. Thinking matched 57/123 ordered records (67/123
+as a multiset), 5/5 dates, and correct empty warnings on all real reports. It still
+omitted all 43 allergy observations and introduced literal-name, duplication,
+unit/reference and qualitative-text errors. None passed a complete real report.
+The five real thinking requests took 1,509.82 seconds, versus 142.60 seconds for
+corrected 4B and 387.76 seconds for 9B. These are development results, not evidence
+of each model's maximum capability or of thinking alone causing the differences.
+
+**Retain the SFT proposal as a small research pilot.** Residual errors are visible
+in the input and match specific extraction rules, so task adaptation remains a
+reasonable hypothesis. Training benefit is not proven. Verify a supported training
+checkpoint and reproducible export/quantization path before committing resources;
+an installed NVFP4 inference model does not establish training/export compatibility.
+Keep B reserved and compare future tuned weights against a usable untuned baseline
+with the same inference settings. Do not train to compensate for the decoding bug.
+
+The complete assessment, discrepancy evidence, timings and one future warning-rule
+clarification are in `data/extraction_poc/qwen35-comparison-v1/assessment.md` and
+`review_items.json`. No labels were changed; no training or new training data was
+created. All allowed inference batches are complete and must not be rerun merely
+to improve their scores.

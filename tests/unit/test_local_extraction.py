@@ -352,6 +352,91 @@ class LocalExtractionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Changed response"):
             experiment.score(self.dataset, self.output)
 
+    def test_followup_profiles_preserve_prompt_and_pin_settings(self):
+        self.freeze()
+        original, _ = experiment.make_request(self.dataset, "Fictitious input")
+        for profile in experiment.PROFILES[1:]:
+            request, bound = experiment.make_request(self.dataset, "Fictitious input", profile)
+            self.assertEqual(request["messages"], original["messages"])
+            expected_schema = copy.deepcopy(original["format"])
+            if profile in ("qwen35-4b-compat", "qwen35-4b-thinking"):
+                del expected_schema["properties"]["results"]["items"]["properties"]["name"]["pattern"]
+            self.assertEqual(request["format"], expected_schema)
+            self.assertEqual(request["options"]["num_ctx"], 32768)
+            self.assertLess(bound + request["options"]["num_predict"], 32768)
+            thinking = profile.endswith("-thinking")
+            self.assertEqual(request["think"], thinking)
+            self.assertEqual(request["options"]["presence_penalty"], 1.5 if thinking else 0)
+            self.assertEqual(request["options"]["temperature"], 1.0 if thinking else 0)
+        with self.assertRaises(ValueError):
+            experiment.configuration("deepseek-v4-flash:cloud")
+
+    def test_followup_ledgers_preserve_original_and_share_thinking_budget(self):
+        self.freeze()
+        self.run_mocked(self.responses())
+        original_ledger = self.dataset.parent / f".{self.dataset.name}.execution.json"
+        before = original_ledger.read_bytes()
+        for profile in ("qwen35-4b", "qwen35-9b", "qwen35-9b-thinking"):
+            config = experiment.configuration(profile)
+            responses = [json.loads(r) for r in self.responses()]
+            for response in responses:
+                response["model"] = config["model"]
+                if config["think"]:
+                    response["message"]["thinking"] = "Fictitious reasoning"
+            allocation = copy.deepcopy(self.allocation)
+            allocation["models"][0].update(name=config["model"], digest=config["digest"])
+            output = self.root / profile
+            with (
+                patch.object(experiment, "preflight", return_value={}),
+                patch.object(experiment, "metadata", return_value=allocation),
+                patch.object(
+                    experiment, "request_bytes", side_effect=list(map(experiment.json_bytes, responses))
+                ) as transport,
+            ):
+                self.assertEqual(experiment.run(self.dataset, output, profile), 0)
+                self.assertEqual(transport.call_count, 6)
+            scores = experiment.score(self.dataset, output)
+            self.assertEqual(scores["summary"]["qwen"]["pooled"]["strict_pass"], 5)
+        self.assertEqual(original_ledger.read_bytes(), before)
+        with patch.object(experiment, "preflight", return_value={}):
+            with self.assertRaisesRegex(ValueError, "already has an attempted run"):
+                experiment.run(self.dataset, self.root / "second-thinking", "qwen35-4b-thinking")
+
+    def test_thinking_profile_rejects_silently_disabled_thinking(self):
+        self.freeze()
+        config = experiment.configuration("qwen35-9b-thinking")
+        allocation = copy.deepcopy(self.allocation)
+        allocation["models"][0].update(name=config["model"], digest=config["digest"])
+        with (
+            patch.object(experiment, "preflight", return_value={}),
+            patch.object(experiment, "metadata", return_value=allocation),
+            patch.object(
+                experiment, "request_bytes", return_value=self.response(self.smoke, model=config["model"])
+            ) as transport,
+        ):
+            self.assertEqual(experiment.run(self.dataset, self.output, "qwen35-9b-thinking"), 1)
+            self.assertEqual(transport.call_count, 1)
+        self.assertTrue((self.output / "smoke/response.raw.json").exists())
+        self.assertFalse((self.output / "smoke/prediction.json").exists())
+
+    def test_mlx_compatibility_keeps_full_post_validation(self):
+        self.freeze()
+        config = experiment.configuration("qwen35-4b-compat")
+        allocation = copy.deepcopy(self.allocation)
+        allocation["models"][0].update(name=config["model"], digest=config["digest"])
+        invalid = copy.deepcopy(self.smoke)
+        invalid["results"][0]["name"] = " "
+        with (
+            patch.object(experiment, "preflight", return_value={}),
+            patch.object(experiment, "metadata", return_value=allocation),
+            patch.object(
+                experiment, "request_bytes", return_value=self.response(invalid, model=config["model"])
+            ) as transport,
+        ):
+            self.assertEqual(experiment.run(self.dataset, self.output, "qwen35-4b-compat"), 1)
+            self.assertEqual(transport.call_count, 1)
+        self.assertFalse((self.output / "smoke/prediction.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,45 @@ DEVELOPMENT = ("A1", "A2", "A3", "A4", "C1")
 COUNTS = {"A1": 20, "A2": 32, "A3": 45, "A4": 2, "B1": 6, "B2": 16, "B3": 21, "B4": 17, "C1": 24}
 FIELDS = ("name", "value", "unit", "reference_range")
 OPTIONS = dict(temperature=0, seed=42, repeat_penalty=1, top_k=20, top_p=0.8, min_p=0, num_ctx=32768, num_predict=16384)
+QWEN35 = {
+    "qwen35-4b": {
+        "model": "qwen3.5:4b-mlx",
+        "digest": "61aa3858e9d3022e8fca725550089addd9289c4446f33bd09dfd12f95f2a6792",
+        "quantization": "nvfp4",
+        "parameters_sha256": "124e6770a2c900e2803d80477676a7fa6b6e3fabd744bfcef60f5b0f46779420",
+    },
+    "qwen35-9b": {
+        "model": "qwen3.5:9b",
+        "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+        "quantization": "Q4_K_M",
+        "parameters_sha256": "6290a4f3b88445e37918439f7730e11dfb1e5f5012138755a4c705a4aebe3185",
+    },
+}
+PROFILES = ("qwen3", "qwen35-4b", "qwen35-9b", "qwen35-4b-compat", "qwen35-4b-thinking", "qwen35-9b-thinking")
+
+
+def configuration(profile="qwen3"):
+    if profile not in PROFILES:
+        raise ValueError("Unknown authorized experiment profile.")
+    config = dict(
+        model=MODEL,
+        digest=DIGEST,
+        quantization="Q8_0",
+        template_sha256=TEMPLATE_HASH,
+        parameters_sha256=PARAMETERS_HASH,
+        options=OPTIONS.copy(),
+        think=False,
+    )
+    if profile != "qwen3":
+        config.update(QWEN35[profile.removesuffix("-thinking").removesuffix("-compat")])
+        config["template_sha256"] = "b507b9c2f6ca642bffcd06665ea7c91f235fd32daeefdf875a0f938db05fb315"
+        config["options"]["presence_penalty"] = 0
+        config["think"] = profile.endswith("-thinking")
+        if config["think"]:
+            config["options"].update(temperature=1.0, top_p=0.95, presence_penalty=1.5)
+    return config
+
+
 RULES = {
     "version": 1,
     "comparison": "Parsed JSON; exact strings/nulls, no numeric, Unicode or field-whitespace normalization.",
@@ -216,52 +255,86 @@ def metadata(route: str, payload=None):
     return json.loads(request_bytes(route, payload))
 
 
-def preflight():
+def preflight(profile="qwen3"):
+    config = configuration(profile)
     version, tags = metadata("/api/version"), metadata("/api/tags")
     if version.get("version") != VERSION:
         raise ValueError("Ollama version changed; review before running.")
-    model = next((m for m in tags["models"] if m["name"] == MODEL), None)
-    if not model or model["digest"] != DIGEST or model.get("remote_host") or model.get("remote_model"):
+    model = next((m for m in tags["models"] if m["name"] == config["model"]), None)
+    if not model or model["digest"] != config["digest"] or model.get("remote_host") or model.get("remote_model"):
         raise ValueError("Required pinned local model is unavailable.")
-    details = metadata("/api/show", {"model": MODEL})
-    if details["details"].get("quantization_level") != "Q8_0":
+    details = metadata("/api/show", {"model": config["model"]})
+    if details.get("remote_host") or details.get("remote_model"):
+        raise ValueError("Remote model metadata is forbidden.")
+    if details["details"].get("quantization_level") != config["quantization"]:
         raise ValueError("Quantization changed.")
-    if sha(details["template"].encode()) != TEMPLATE_HASH or sha(details["parameters"].encode()) != PARAMETERS_HASH:
+    if (
+        sha(details["template"].encode()) != config["template_sha256"]
+        or sha(details["parameters"].encode()) != config["parameters_sha256"]
+    ):
         raise ValueError("Native model template/parameters changed.")
     info = details["model_info"]
-    if info.get("tokenizer.ggml.model") != "gpt2" or info.get("tokenizer.ggml.pre") != "qwen2":
+    tokenizer_evidence = {}
+    if config["quantization"] == "nvfp4":
+        # MLX /show omits tokenizer internals. Verify the previously downloaded public metadata offline.
+        directory = ROOT / "data/extraction_poc/qwen35-metadata-v1"
+        hashes = {
+            "registry-manifest.json": config["digest"],
+            "tokenizer.json": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+            "tokenizer_config.json": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8",
+        }
+        for name, digest in hashes.items():
+            if sha((directory / name).read_bytes()) != digest:
+                raise ValueError("MLX tokenizer provenance changed.")
+        tokenizer_evidence = {
+            "files": hashes,
+            "directory": str(directory),
+            "chat_template": read_json(directory / "tokenizer_config.json")["chat_template"],
+        }
+    elif info.get("tokenizer.ggml.model") != "gpt2" or info.get("tokenizer.ggml.pre") != (
+        "qwen2" if profile == "qwen3" else "qwen35"
+    ):
         raise ValueError("Byte-level tokenizer assumption no longer holds.")
-    return {"version": version, "model": model, "show": details}
+    return {"version": version, "model": model, "show": details, "tokenizer_evidence": tokenizer_evidence}
 
 
-def make_request(dataset: Path, text: str):
+def make_request(dataset: Path, text: str, profile="qwen3"):
+    config = configuration(profile)
     prompt, system, _ = PromptEngine(dataset / "prompts").render(
         PromptTypeEnum.laboratory_test_processor, "v4", input_text=text
     )
     bound = len((system["system_instruction"] + prompt).encode("utf-8")) + 1024
-    if bound + OPTIONS["num_predict"] > OPTIONS["num_ctx"]:
+    if bound + config["options"]["num_predict"] > config["options"]["num_ctx"]:
         raise ValueError("Conservative input bound plus output allowance exceeds context.")
+    decoding_schema = copy.deepcopy(system["response_json_schema"])
+    if profile in ("qwen35-4b-compat", "qwen35-4b-thinking"):
+        # MLX/XGrammar treats this unanchored JSON Schema pattern as a whole string.
+        # Keep the original pattern in post-validation; only decoding omits it.
+        del decoding_schema["properties"]["results"]["items"]["properties"]["name"]["pattern"]
     return {
-        "model": MODEL,
+        "model": config["model"],
         "messages": [{"role": "system", "content": system["system_instruction"]}, {"role": "user", "content": prompt}],
-        "format": system["response_json_schema"],
-        "options": OPTIONS.copy(),
+        "format": decoding_schema,
+        "options": config["options"].copy(),
         "stream": False,
-        "think": False,
+        "think": config["think"],
         "keep_alive": "10m",
     }, bound
 
 
-def run(dataset: Path, output: Path) -> int:
+def run(dataset: Path, output: Path, profile="qwen3") -> int:
+    config = configuration(profile)
     if output.exists():
         raise FileExistsError(output)
     packet = load_packet(dataset)
-    runtime = preflight()
+    runtime = preflight(profile)
     entries = [{"document_id": "smoke", "input": "smoke/omissions.txt"}] + [
         next(d for d in packet["documents"] if d["document_id"] == name) for name in DEVELOPMENT
     ]
-    prepared = [make_request(dataset, (dataset / d["input"]).read_text()) for d in entries]
-    ledger_path = dataset.parent / f".{dataset.name}.execution.json"
+    prepared = [make_request(dataset, (dataset / d["input"]).read_text(), profile) for d in entries]
+    # The original ledger remains intact. Both thinking candidates share one additional six-call budget.
+    scope = "" if profile == "qwen3" else "." + ("qwen35-thinking" if config["think"] else profile)
+    ledger_path = dataset.parent / f".{dataset.name}{scope}.execution.json"
     with ledger_path.open("a+", encoding="utf-8") as ledger:
         fcntl.flock(ledger, fcntl.LOCK_EX | fcntl.LOCK_NB)
         ledger.seek(0)
@@ -272,15 +345,18 @@ def run(dataset: Path, output: Path) -> int:
         write_json(output / "runtime.json", runtime)
         manifest = {
             "started_at": now(),
+            "profile": profile,
+            "think": config["think"],
             "dataset_sha256": sha((dataset / "manifest.json").read_bytes()),
-            "model": MODEL,
-            "digest": DIGEST,
+            "model": config["model"],
+            "digest": config["digest"],
             "ollama_version": VERSION,
             "endpoint": ENDPOINT,
             "prompt_sha256": PROMPT_HASH,
             "schema_sha256": sha(json_bytes(read_json(dataset / "schema.json"))),
-            "template_sha256": TEMPLATE_HASH,
-            "options": OPTIONS,
+            "decoding_schema_sha256": sha(json_bytes(prepared[0][0]["format"])),
+            "template_sha256": config["template_sha256"],
+            "options": config["options"],
             "attempts": 0,
             "hardware_user_reported": "MacBook Air M5, 24 GB unified memory",
             "host_peak_memory_and_pressure": "unavailable from container; allocation snapshots only",
@@ -349,14 +425,18 @@ def run(dataset: Path, output: Path) -> int:
                 if response.get("error"):
                     runtime_failure = True
                     raise ValueError(response["error"])
-                if response.get("model") != MODEL:
+                if response.get("model") != config["model"]:
                     runtime_failure = True
                     raise ValueError("Response model identity differs.")
                 if not response.get("done") or response.get("done_reason") != "stop":
                     raise ValueError("Incomplete response or output limit reached.")
-                if message.get("tool_calls") or message.get("thinking"):
+                if message.get("tool_calls") or (message.get("thinking") and not config["think"]):
                     raise ValueError("Unexpected tools or thinking output.")
-                prediction = parse_and_validate_extraction(content, request["format"])
+                record["thinking_characters"] = len(message.get("thinking", ""))
+                if config["think"] and not message.get("thinking"):
+                    runtime_failure = True
+                    raise ValueError("Requested thinking mode produced no separate thinking; verify runtime support.")
+                prediction = parse_and_validate_extraction(content, read_json(dataset / "schema.json"))
                 write_json(directory / "prediction.json", prediction)
                 record.update(status="success", prediction_sha256=sha((directory / "prediction.json").read_bytes()))
             except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException) as error:
@@ -375,8 +455,11 @@ def run(dataset: Path, output: Path) -> int:
                 record.update(wall_seconds=time.monotonic() - start, finished_at=now())
                 try:
                     record["allocation_after"] = metadata("/api/ps")
-                    loaded = next(m for m in record["allocation_after"]["models"] if m["name"] == MODEL)
-                    if loaded.get("context_length") != OPTIONS["num_ctx"] or loaded.get("digest") != DIGEST:
+                    loaded = next(m for m in record["allocation_after"]["models"] if m["name"] == config["model"])
+                    if (
+                        loaded.get("context_length") != config["options"]["num_ctx"]
+                        or loaded.get("digest") != config["digest"]
+                    ):
                         raise ValueError("Loaded context/model differs from requested configuration.")
                 except Exception as error:
                     runtime_failure = True
@@ -490,15 +573,23 @@ def apply_warning_review(metrics: dict, record: dict, reviews: dict):
 def score(dataset: Path, run_dir: Path):
     packet = load_packet(dataset)
     manifest = read_json(run_dir / "manifest.json")
+    profile = manifest.get("profile", "qwen3")
+    config = configuration(profile)
     if manifest["dataset_sha256"] != sha((dataset / "manifest.json").read_bytes()):
         raise ValueError("Run belongs to a different packet.")
     if (manifest["digest"], manifest["ollama_version"], manifest["prompt_sha256"], manifest["options"]) != (
-        DIGEST,
+        config["digest"],
         VERSION,
         PROMPT_HASH,
-        OPTIONS,
+        config["options"],
     ):
         raise ValueError("Run configuration differs from the frozen experiment.")
+    if (
+        manifest["model"] != config["model"]
+        or manifest["template_sha256"] != config["template_sha256"]
+        or manifest.get("think", False) != config["think"]
+    ):
+        raise ValueError("Run model/template/thinking differs from its profile.")
     if [r["document_id"] for r in manifest["records"]] != ["smoke", *DEVELOPMENT]:
         raise ValueError("Unexpected run inventory; B scoring is forbidden.")
     schema = read_json(dataset / "schema.json")
@@ -518,7 +609,7 @@ def score(dataset: Path, run_dir: Path):
             raise ValueError("Run input differs from frozen packet.")
         if record.get("request_sha256"):
             request_raw = (run_dir / identifier / "request.json").read_bytes()
-            expected_request, _ = make_request(dataset, (dataset / input_path).read_text())
+            expected_request, _ = make_request(dataset, (dataset / input_path).read_text(), profile)
             if sha(request_raw) != record["request_sha256"] or json.loads(request_raw) != expected_request:
                 raise ValueError("Saved request differs from the frozen experiment.")
         prediction = None
@@ -670,6 +761,7 @@ def main(argv=None):
     export = commands.add_parser("freeze")
     export.add_argument("--output-dir", type=Path, required=True)
     execute = commands.add_parser("run")
+    execute.add_argument("--profile", choices=PROFILES, default="qwen3")
     execute.add_argument("--dataset", type=Path, required=True)
     execute.add_argument("--output-dir", type=Path, required=True)
     evaluate = commands.add_parser("score")
@@ -679,7 +771,7 @@ def main(argv=None):
     if args.command == "freeze":
         freeze(args.output_dir)
     elif args.command == "run":
-        return run(args.dataset, args.output_dir)
+        return run(args.dataset, args.output_dir, args.profile)
     else:
         score(args.dataset, args.run_dir)
     return 0

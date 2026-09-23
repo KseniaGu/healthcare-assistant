@@ -243,3 +243,123 @@ Local evidence: `data/extraction_poc/qwen-eval-packet-v1/` and
 `warning_review.json` and the raw responses. All six attempts are exhausted for
 this packet. Offline scoring can be repeated without inference. The final offline
 regression suite passed 34 tests; no PostgreSQL test was needed for this isolated CLI.
+
+### Authorized Qwen3.5 comparison
+
+A separate follow-up compares the already installed `qwen3.5:4b-mlx` (NVFP4) and
+`qwen3.5:9b` (Q4_K_M) on the same frozen A+C packet. The original Qwen3 run and its
+exhausted ledger remain unchanged. The `--profile` argument selects pinned model
+identities; it does not allow arbitrary models or providers.
+
+```sh
+poetry run python -m backend.data_processing.evaluate_local_extraction run \
+  --profile qwen35-4b --dataset data/extraction_poc/qwen-eval-packet-v1 \
+  --output-dir data/extraction_poc/qwen35-4b-untuned-v1
+poetry run python -m backend.data_processing.evaluate_local_extraction run \
+  --profile qwen35-9b --dataset data/extraction_poc/qwen-eval-packet-v1 \
+  --output-dir data/extraction_poc/qwen35-9b-untuned-v1
+```
+
+Each profile has one six-request allowance: omissions compatibility fixture, then
+A1-A4 and C1. Both use the original deterministic settings with an explicit
+`presence_penalty=0` override (the Qwen3.5 packages default to 1.5). The runtime,
+32K context, 16K output allowance, prompt, JSON Schema, scoring and request order
+remain fixed. Native templates and default parameters are recorded and hash-pinned.
+The `/show` template for Qwen3.5 is the runtime placeholder `{{ .Prompt }}`; it does
+not expose the complete built-in formatter. Pinning the Ollama version and model
+is therefore part of template provenance. For MLX, public tokenizer metadata and
+its bundled chat template were separately downloaded and verified against the
+installed model's registry manifest; no weights were downloaded. The tokenizer is
+byte-level, preserving the conservative input-bound rationale. These metadata
+snapshots live under `data/extraction_poc/qwen35-metadata-v1/` and are required for
+MLX preflight; the runner itself never downloads them.
+
+If neither initial profile meets the complete real and synthetic targets, one
+thinking-enabled profile may run for the better usable candidate. Candidate
+selection is fixed before inference: absence of runtime/schema failures, strict
+report passes, multiset exact records, correct dates, position-aligned fields,
+then prefer 4B on a tie. Thinking profiles use `temperature=1`, `top_p=0.95`,
+`presence_penalty=1.5`, and otherwise retain the same options. The output allowance
+includes reasoning. Separate thinking content must actually be returned; otherwise
+compatibility fails. Raw responses retain it, but only final JSON is scored.
+Both `qwen35-4b-thinking` and `qwen35-9b-thinking` share a single six-request ledger,
+so the entire follow-up is bounded at 18 generation requests. No automatic retries.
+
+The pre-result protocol is saved with its hash in
+`data/extraction_poc/qwen35-comparison-v1/plan.json`. This is model/configuration
+selection on development data, not an isolated architecture or quantization study.
+A single fixed-seed stochastic run does not estimate expected performance. B stays
+reserved. An untuned pass motivates unseen validation before SFT; residual errors
+can justify an SFT pilot, but cannot prove training will improve generalization.
+
+#### MLX pattern compatibility amendment
+
+The initial MLX run returned one-character names for every real result. The frozen
+schema's unanchored `pattern: \S` means that a name must contain a non-whitespace
+character. In inspected XGrammar v0.2.5 source, `GenerateString` places the converted
+regex directly between quotes, restricting this pattern to a whole one-character
+string. Ollama v0.33.2's MLX runner uses XGrammar; the exact installed native library
+build is not exposed by `/api/show`. The observed behavior is consistent with that
+conversion. This confounds the first MLX run as evidence of model capability.
+
+Before further MLX inference, a recorded amendment adds `qwen35-4b-compat`: remove
+only the name pattern from the **decoding** schema, retaining minLength and all other
+constraints. Every final response still undergoes the original frozen schema/date
+validation, including the nonblank-name pattern. Prompt, targets and scoring do not
+change. The request and manifest record the decoding schema and its separate hash.
+The same compatibility treatment applies if 4B thinking is later selected.
+
+This additional six-request batch raises the follow-up ceiling to 24 requests.
+Candidate selection uses compatibility-corrected 4B versus the original 9B profile,
+excluding the confounded initial MLX result. The original plan is preserved; the
+amendment and source snapshots are recorded separately in
+`data/extraction_poc/qwen35-comparison-v1/`. Do not interpret the decoding correction
+as an SFT gain or compare future tuned weights against the broken-constraint run.
+
+References: [JSON Schema pattern semantics](https://json-schema.org/understanding-json-schema/reference/string#regexp),
+[Ollama v0.33.2 MLX grammar](https://github.com/ollama/ollama/blob/v0.33.2/x/mlxrunner/grammar.go),
+[XGrammar v0.2.5 string conversion](https://github.com/mlc-ai/xgrammar/blob/v0.2.5/cpp/json_schema_converter.cc).
+
+
+#### Completed follow-up results — assessed 2026-09-23
+
+All 24 authorized requests completed, with valid final JSON and normal stop reasons.
+Every observed allocation used 32K. No report met the complete exact target in any
+new configuration. The synthetic fixture remains outside pooled real-report scores.
+
+| Configuration | Dates / 5 | Ordered records / 123 | Multiset records / 123 | Fields / 492 | Real warning passes / 5 |
+|---|---:|---:|---:|---:|---:|
+| Original Qwen3 4B Q8_0 | 4 | 61 | 61 | 301 | 0 |
+| Qwen3.5 4B MLX, original constraints (confounded) | 3 | 0 | 0 | 206 | 0 |
+| Qwen3.5 4B MLX, compatible constraints | 3 | 70 | 70 | 310 | 0 |
+| Qwen3.5 9B Q4_K_M, non-thinking | 5 | 64 | 64 | 379 | 4 |
+| Qwen3.5 4B MLX, thinking | 5 | 57 | 67 | 268 | 5 |
+| Saved Gemini on A+C | 5 | 123 | 123 | 492 | 5 |
+
+The frozen ranking selected corrected 4B for the single thinking batch. Its
+improvements to dates and warnings did not recover the 43-row allergy panel or
+ensure literal copying. 9B covered all expected named observations, with one extra
+cover row, but systematically confused allergy classes and direct references.
+These tradeoffs make pooled exact-record count alone unsuitable for choosing a
+production extractor. A3 remains separately visible in the detailed assessment.
+
+Real-report wall times: corrected 4B 142.60 s, 9B 387.76 s, thinking 4B 1,509.82 s.
+MLX thinking API counters do not transparently include its full reasoning cost;
+use wall time for end-to-end latency. Its synthetic request took 314.45 s while
+reported generation duration was only 6.30 s. Allocation snapshots are not peak
+host memory. No host memory-pressure measurement was available.
+
+The thinking smoke has exact date/results and a substantially correct omission
+warning, but omits units required by the frozen semantic checklist. That detail
+remains a scored failure; `review_items.json` records a future-protocol question
+because the prompt requests visible values without explicitly requesting their
+units. No current target, prompt, checklist or score was relaxed.
+
+Recommendation: retain a bounded SFT pilot as a research hypothesis, after checking
+training/export compatibility. The experiments establish a residual extraction gap,
+not guaranteed SFT benefit or exhaustive model optimization. B remains reserved.
+Evidence: `data/extraction_poc/qwen35-comparison-v1/assessment.md`, `comparison.json`,
+protocol/amendment/selection records, and the four individual run directories.
+All follow-up ledgers are exhausted; offline scoring remains available.
+The extended offline suite passed 38 tests, including profile isolation, shared
+thinking allowance, unchanged prompts and strict post-validation of MLX outputs.

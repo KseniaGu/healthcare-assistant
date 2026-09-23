@@ -113,8 +113,13 @@ The verified container endpoint is `http://host.orb.internal:11434`; container
 `localhost` refers to the container, not the Mac. No public network exposure or
 additional container Ollama installation is needed for the verified connection.
 
-This experiment pins Ollama 0.33.2 and the already-installed
-`qwen3:4b-instruct-2507-q8_0` package. It requests 32K context per API call regardless
+The original experiment pins Ollama 0.33.2 and the already-installed
+`qwen3:4b-instruct-2507-q8_0` package. Separately authorized `--profile` options cover
+installed Qwen3.5 4B MLX and 9B models; each has an independent bounded ledger, with
+one shared allowance for the selected thinking variant. See the
+[comparison protocol](prompt_evaluation.md#authorized-qwen35-comparison), including
+the MLX decoding-pattern compatibility correction and local tokenizer metadata
+prerequisite. No model is downloaded automatically. The evaluator requests 32K context per API call regardless
 of the application's context slider. Run it using Poetry; commands and safeguards
 are in [prompt evaluation](prompt_evaluation.md#local-untuned-qwen-evaluation).
 Neither the application's Gemini default nor LlamaParse changes.

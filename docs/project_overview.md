@@ -56,7 +56,7 @@ Current extraction defaults are explicit in the code:
 | --- | --- | --- |
 | Pipeline and Gemini behavior test | `DataSettings.prompt_version = "v4"` | `gemini-3.1-flash-lite` |
 | Standalone Gemini baseline runner | CLI `--prompt-version`, default `v4` | Configured processor model; explicit `--model` override |
-| Local Qwen experiment | Frozen `v4` revision 4.1 | Pinned `qwen3:4b-instruct-2507-q8_0` through host Ollama |
+| Local Qwen experiment | Frozen `v4` revision 4.1 | Original Qwen3 4B Q8_0; separately pinned Qwen3.5 4B MLX / 9B comparison profiles through host Ollama |
 | Direct `GeminiClient.generate()` calls omitting arguments | `prompt_version="v1"` | Configured Gemini model |
 
 The UI can override the generation model, but prompt selection is not model-specific.
