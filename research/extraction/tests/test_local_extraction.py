@@ -11,7 +11,7 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.data_processing import evaluate_local_extraction as experiment
+from research.extraction import evaluate_local_extraction as experiment
 
 
 class LocalExtractionTests(unittest.TestCase):

@@ -74,15 +74,15 @@ entire processing run is not one atomic transaction.
 [PathSettings](../configs/paths.py) creates directories under `data/` for raw,
 redacted, parsed, processed, and raw LLM outputs. Existing output paths can cause
 stages to be skipped; account for cached artifacts when retesting prompts or OCR.
-The standalone `backend.data_processing.run_extraction_baseline` CLI always uses a
+The standalone `research.extraction.run_extraction_baseline` CLI always uses a
 new output directory, explicit parser inputs, local schema validation, and a shared
 nine-attempt development budget. It bypasses PDF processing and database caching.
-See [prompt evaluation and runner usage](prompt_evaluation.md#fresh-run-tooling).
-The separate `backend.data_processing.evaluate_local_extraction` CLI freezes reviewed
+See [evaluation runner usage](../research/extraction/README.md).
+The separate `research.extraction.evaluate_local_extraction` CLI freezes reviewed
 targets, runs a bounded local Qwen experiment, and scores saved responses offline.
 Its A+C development split reserves B from inference and scoring. It leaves the
 application defaults and Gemini budget unchanged; see the
-[local experiment record](prompt_evaluation.md#local-untuned-qwen-evaluation).
+[local experiment record](../research/extraction/evaluations.md).
 
 Reports retain complete extraction JSON, including dates and errors. Observation
 persistence uses `unit`, catalog preferences use `unit_normalized`, unnamed rows
@@ -170,5 +170,6 @@ directories; these are not side-effect-free offline checks.
 
 - [Application setup and usage](application_guide.md)
 - [v4 storage update, migration and historical recovery](v4_application_update.md)
-- [Prompt contract, evaluation results and runner](prompt_evaluation.md)
-- [Proposed small-model training experiment](llm_training_experiment.md)
+- [Research status and next steps](../research/README.md)
+- [Prompt contract and evaluation results](../research/extraction/evaluations.md)
+- [Proposed small-model training experiment](../research/extraction/plan.md)

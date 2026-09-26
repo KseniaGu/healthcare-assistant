@@ -30,6 +30,7 @@ models_cache/
 docs/*
 !docs/project_overview.md
 !docs/application_guide.md
+!docs/local_image_redaction.md
 
 # Environment
 .env
@@ -41,3 +42,9 @@ secrets.yml
 # Alembic
 alembic.ini
 !.devcontainer/alembic.ini
+
+# Local Python environments are reproducible, not experiment artifacts.
+.venv/
+
+# Archived
+research/extraction/archive/

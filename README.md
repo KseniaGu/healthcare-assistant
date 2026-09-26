@@ -55,6 +55,4 @@ Screenshots illustrate the workflow and may predate the latest interface changes
 | --- | --- |
 | [Application guide](docs/application_guide.md) | Setup, daily use, configuration, and troubleshooting |
 | [Project overview](docs/project_overview.md) | Architecture, components, data flow, and limitations |
-| [v4 application update](docs/v4_application_update.md) | Storage/display changes, database migration, recovery scripts, and verification |
-| [Prompt evaluation](docs/prompt_evaluation.md) | v3/v4 contract, recorded results, and fresh-run tooling |
-| [Small-model training experiment](docs/llm_training_experiment.md) | Motivation, proposed dataset strategy, baselines, training, and evaluation |
+| [Research overview](research/README.md) | Research question, completed experiments, conclusions and next steps |

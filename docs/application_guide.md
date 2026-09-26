@@ -66,7 +66,7 @@ with a warning; pending tests are excluded from completed results.
 
 Uploading an already processed document may return the stored report. Changing the
 prompt does not automatically re-extract old reports. Developers needing a fresh
-comparison should use the [evaluation runner](prompt_evaluation.md#fresh-run-tooling).
+comparison should use the [evaluation runner](../research/extraction/README.md).
 
 ## Viewing results
 
@@ -105,28 +105,16 @@ The current text validation expects Russian reports. English OCR availability do
 not imply full English extraction support. See [current limits](project_overview.md#tests-and-current-limits)
 for additional operational constraints.
 
-## Standalone local extraction experiment
+## Research tools
 
-The evaluation client runs inside the devcontainer; Ollama runs natively on macOS
-and uses the host GPU. Start the Mac Ollama application before using the evaluator.
-The verified container endpoint is `http://host.orb.internal:11434`; container
-`localhost` refers to the container, not the Mac. No public network exposure or
-additional container Ollama installation is needed for the verified connection.
+Experimental runners, commands and environment requirements are documented in
+[research/extraction](../research/extraction/README.md). The [research overview](../research/README.md)
+explains the current findings and next steps. Local image preparation has its own
+[standalone tool](../research/image_redaction/README.md).
 
-The original experiment pins Ollama 0.33.2 and the already-installed
-`qwen3:4b-instruct-2507-q8_0` package. Separately authorized `--profile` options cover
-installed Qwen3.5 4B MLX and 9B models; each has an independent bounded ledger, with
-one shared allowance for the selected thinking variant. See the
-[comparison protocol](prompt_evaluation.md#authorized-qwen35-comparison), including
-the MLX decoding-pattern compatibility correction and local tokenizer metadata
-prerequisite. No model is downloaded automatically. The evaluator requests 32K context per API call regardless
-of the application's context slider. Run it using Poetry; commands and safeguards
-are in [prompt evaluation](prompt_evaluation.md#local-untuned-qwen-evaluation).
-Neither the application's Gemini default nor LlamaParse changes.
-
-Run only one evaluation client, keep the Mac awake and avoid other Ollama workloads
-during the batch. The runner records Ollama allocation snapshots and durations;
-macOS Activity Monitor can supplement those with memory pressure observations, but
-container memory is not host model memory. Dataset packets, predictions and review
-reports remain under gitignored `data/`. The devcontainer's data volume masks host
-data, so a host-side workflow would require an explicit local export.
+Ollama runs on the Mac; the container endpoint is `http://host.orb.internal:11434`,
+and host clients use `http://127.0.0.1:11434`. The evaluators request their own 32K
+context and verify it independently of the desktop slider. No application defaults
+change when running these tools. Private experiment artifacts stay in `data/`;
+its container volume can mask the host directory. Existing live experiment budgets
+are exhausted; consult the research protocol before any new requests.
