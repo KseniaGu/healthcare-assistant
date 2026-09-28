@@ -5,7 +5,9 @@
 Run commands from the repository root. The fictitious fixtures are in `fixtures/`;
 they are test assets, not training data.
 
-This standalone tool accepts **one explicitly named JPEG, PNG or single-frame WebP** at a time. It runs
+This standalone tool accepts **one explicitly named image or PDF** at a time. Images
+can be JPEG, PNG or single-frame WebP; `propose-pdf` renders each PDF page locally
+at 300 DPI and creates a separate image candidate. It runs
 Tesseract OCR (`rus+eng`), GLiNER on CPU, narrow contact/ID rules, and local QR/
 barcode region detection. It fills proposed areas with opaque black pixels in a
 new RGB PNG. It does not initialize the application, database, tracing, parser or
@@ -32,9 +34,10 @@ Python 3.11, Tesseract with `eng` and `rus`, and an isolated environment are
 required. On macOS with Homebrew:
 
 ```sh
-brew install tesseract tesseract-lang
-python3.11 -m venv /private/tmp/lab-redactor-venv
-/private/tmp/lab-redactor-venv/bin/pip install -r research/image_redaction/requirements.txt
+brew install python@3.11 tesseract tesseract-lang
+"$(brew --prefix python@3.11)/bin/python3.11" -m venv "$HOME/.venvs/lab-redactor-py311"
+PY="$HOME/.venvs/lab-redactor-py311/bin/python"
+"$PY" -m pip install -r research/image_redaction/requirements.txt
 tesseract --list-langs
 ```
 
@@ -45,6 +48,45 @@ downloaded only when you pass
 `HF_HUB_OFFLINE=1` on subsequent runs or simply omit the flag. The isolated
 environment is deliberately separate from the app's Poetry environment.
 
+## Host cache and Python troubleshooting
+
+A host error naming `/home/vscode/.cache/huggingface` indicates a container cache
+location is being used on macOS. Before launching a fresh Python process, set:
+
+```sh
+export HF_HOME="$HOME/.cache/huggingface"
+export HF_HUB_CACHE="$HF_HOME/hub"
+unset TRANSFORMERS_CACHE HUGGINGFACE_HUB_CACHE
+mkdir -p "$HF_HUB_CACHE"
+```
+
+Do not create `/home/vscode` or use sudo to work around this on the Mac. The CLI
+inherits cache settings; it does not load application settings or `.env`. The
+container intentionally uses that Linux location in `.devcontainer/compose.yaml`.
+The exact source of a host override must be checked in the host shell/IDE settings.
+Hugging Face reads these settings on import, so restart the command after changing
+them. See [cache environment variables](https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables).
+
+If a traceback or warning names `lib/python3.14`, that environment was created with
+Python 3.14 even if it is named `lab-redactor`. Use the documented Python 3.11
+interpreter explicitly to create a separate environment; activation cannot change
+an environment's interpreter. A persistent location avoids `/private/tmp` cleanup:
+
+```sh
+brew install python@3.11
+"$(brew --prefix python@3.11)/bin/python3.11" -m venv "$HOME/.venvs/lab-redactor-py311"
+PY="$HOME/.venvs/lab-redactor-py311/bin/python"
+"$PY" -m pip install --upgrade pip
+"$PY" -m pip install -r research/image_redaction/requirements.txt
+"$PY" --version
+```
+
+The reported `cmsOpenProfileFromMem failed` message concerns PDF color-profile
+handling. In the observed host attempt, processing continued to model cache lookup;
+it was not the terminating error. Inspect eventual rendered candidates for visual
+fidelity rather than assuming the profile warning proves either success or failure.
+No private PDF was opened to diagnose this message.
+
 ## Private candidate and review flow
 
 Keep originals and the private workspace in different directories. Keep the
@@ -54,8 +96,8 @@ locally; do not paste private paths, OCR or screenshots into a coding-assistant
 session.
 
 ```sh
-PY=/private/tmp/lab-redactor-venv/bin/python
-WORK=/private/tmp/lab-redaction-private
+PY="$HOME/.venvs/lab-redactor-py311/bin/python"
+WORK="$HOME/.local/share/lab-redaction-private"
 APPROVED=data/approved_image_redactions
 
 $PY research/image_redaction/local_image_redactor.py propose '/private/path/report.jpg' \
@@ -146,12 +188,96 @@ source EXIF, thumbnails and other inherited metadata are discarded. The tool
 reopens each candidate to check its format, frame count, size and metadata. It
 does not assert that review or a second OCR pass guarantees anonymization.
 
+## PDF reports: local page rendering and image review
+
+PDF input is supported by `propose-pdf`. Native PDF editing/export is not needed
+for this workflow: the user accepted image-based parsing for the two remaining
+original reports. The original PDF stays private and unchanged. PyMuPDF renders
+one page at a time in memory; no persistent unmasked page PNGs are added. The existing
+local OCR step uses a temporary PNG and removes it afterward. OCR, suggestions,
+masking and review use the existing image workflow. No LlamaParse or Gemini is called.
+
+Run from the repository root in your own host terminal. Install the updated isolated
+requirements (now including PyMuPDF), then replace the example PDF path locally:
+
+```sh
+PY="$HOME/.venvs/lab-redactor-py311/bin/python"
+WORK="$HOME/.local/share/lab-redaction-private"
+APPROVED=data/approved_image_redactions
+PDF='/absolute/private/path/to/remaining-report.pdf'
+
+"$PY" -m pip install -r research/image_redaction/requirements.txt
+"$PY" research/image_redaction/local_image_redactor.py propose-pdf "$PDF" \
+  --work "$WORK" --id D0017
+"$PY" research/image_redaction/local_image_redactor.py review \
+  --work "$WORK" --approved "$APPROVED"
+```
+
+Use a fresh neutral report ID (for example D0018 for the second report); do not
+reuse an image/report ID already in the workspace or approved collection. Add
+`--allow-model-download` to `propose-pdf` only if the cached detector is not yet
+available. The original host setup above is needed if that Python environment
+no longer exists. Keep originals outside WORK, and keep WORK outside the repository
+and synced folders. A temporary WORK directory must be backed up privately if you
+want to retain editable revisions and decisions across cleanup/reboots.
+
+The completed original-report exports are D0017 (2 pages) and D0018 (8 pages),
+with all review follow-ups resolved by user confirmation on 2026-09-27. Exact
+current PNG/JSON paths and checks are in the [private review](../../data/approved_image_redactions/originals-review-2026-09-26.md)
+and [report inventory](../../data/research/report_inventory.md). D0018-p008 has no
+results and remains grouped with D0018. The user confirmed KDL = original group B;
+both reports remain reserved from adaptation in the [SFT preparation workflow](../extraction/preparation.md). The three-page example below illustrates
+naming only; it does not describe D0017's actual page count.
+
+A three-page PDF creates `D0017-p001`, `D0017-p002`, `D0017-p003` in WORK. These
+are page IDs, not three independent reports. Review every page in your browser.
+Use the displayed pixel rectangles and mask indices for the relevant page:
+
+```sh
+"$PY" research/image_redaction/local_image_redactor.py revise \
+  --work "$WORK" --id D0017-p001 --mask 120 60 400 95
+"$PY" research/image_redaction/local_image_redactor.py revise \
+  --work "$WORK" --id D0017-p001 --drop-mask 3
+```
+
+The numbers above are illustrative; use the coordinates/indices from your candidate.
+Revisions re-render the same original PDF page at the same DPI and retain the source
+hash check. Dropping a mask restores original pixels in a new candidate; it cannot
+recover content from a PDF that was already destructively redacted before import.
+All revised candidates need their own Keep decision. Older exports are not revoked
+automatically; remove unsafe/superseded versions from any proposed sharing packet.
+
+**Only Keep-approved pages go into `data/approved_image_redactions/`.** Exports are
+named `D0017-p001-v001-<hash>.png` with a matching `.json`. PDF-page manifests add
+`source_document_id`, one-based `page_number`, `source_type: "pdf"`, `render_dpi: 300`,
+and a fixed `page_group` equal to the neutral report ID. They contain no private
+PDF path, source hash, OCR text or mask coordinates. Approval remains per page;
+before downstream use, ensure every required page has its final approved version.
+Keep pages in order and group them as one report for annotation and evaluation.
+
+```sh
+"$PY" research/image_redaction/local_image_redactor.py verify \
+  --work "$WORK" --approved "$APPROVED"
+```
+
+PDF preparation accepts unencrypted PDFs up to 40 MB and 50 pages; each rendered
+page must fit the existing 30-million-pixel / 10,000-pixel-side limits. Rotation is
+rendered into the image, so manual masks use displayed pixel coordinates. A failure
+may leave earlier page candidates private; it never approves them. A repeated
+`propose-pdf` with existing page IDs is rejected. Review/revise existing candidates;
+for a missing page, use `propose '/private/path/report.pdf' --work "$WORK" --id
+D0017-p002` with the appropriate page ID rather than overwriting earlier versions.
+
+Downstream parser text may differ from the native PDF condition. Record this input
+as a rasterized PDF derivative, retain the private original mapping, and do not
+reuse historical text/targets blindly. No real PDF was processed during development.
+
 ## Fictitious verification
 
 ```sh
-/private/tmp/lab-redactor-venv/bin/python -m unittest discover -s research/image_redaction/tests -v
-/private/tmp/lab-redactor-venv/bin/python research/image_redaction/make_fictitious_lab_images.py /private/tmp/lab-redactor-fixtures
-/private/tmp/lab-redactor-venv/bin/python research/image_redaction/local_image_redactor.py propose \
+"$HOME/.venvs/lab-redactor-py311/bin/python" -m unittest discover -s research/image_redaction/tests -v
+"$HOME/.venvs/lab-redactor-py311/bin/python" research/image_redaction/make_fictitious_lab_images.py /private/tmp/lab-redactor-fixtures
+"$HOME/.venvs/lab-redactor-py311/bin/python" research/image_redaction/local_image_redactor.py propose \
   /private/tmp/lab-redactor-fixtures/invented_report.png \
   --work /private/tmp/lab-redactor-demo-private --id D9001
 ```

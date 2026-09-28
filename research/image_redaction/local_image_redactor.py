@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 
-TOOL_VERSION = "1.4"
+TOOL_VERSION = "1.5"
 MODEL_ID = "urchade/gliner_multi-v2.1"
 TOKENIZER_ID = "microsoft/mdeberta-v3-base"
 TOKENIZER_FILES = ("config.json", "tokenizer_config.json", "spm.model")
@@ -34,7 +34,7 @@ MAX_BYTES = 40_000_000
 MAX_PIXELS = 30_000_000
 MAX_SIDE = 10_000
 PADDING = 3
-ID_RE = re.compile(r"D[0-9]{4,8}\Z")
+ID_RE = re.compile(r"D[0-9]{4,8}(?:-p[0-9]{3})?\Z")
 EMAIL = re.compile(r"(?<![\w.])[\w.+-]+@[\w.-]+\.[A-Za-zА-Яа-я]{2,}(?!\w)")
 PHONE = re.compile(r"(?<!\w)(?:\+?7|8)[\s()\-]*(?:\d[\s()\-]*){10}(?!\w)")
 URL = re.compile(r"(?i)\b(?:https?://|www\.)[^\s]+")
@@ -97,6 +97,49 @@ def load_image(path: Path) -> Image.Image:
             return image
     except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
         raise RedactionError("unreadable image") from None
+
+
+def load_pdf_page(path: Path, page_number: int) -> Image.Image:
+    """Render one PDF page locally at 300 DPI without saving an unmasked image."""
+    import math
+
+    import pymupdf
+
+    if path.stat().st_size > MAX_BYTES:
+        raise RedactionError("input exceeds size limit")
+    with pymupdf.open(path) as document:
+        if not document.is_pdf or document.needs_pass:
+            raise RedactionError("an unencrypted PDF is required")
+        if not 1 <= page_number <= len(document):
+            raise RedactionError("PDF page number out of range")
+        page = document[page_number - 1]
+        width, height = (math.ceil(v * 300 / 72) for v in (page.rect.width, page.rect.height))
+        if width * height > MAX_PIXELS or max(width, height) > MAX_SIDE:
+            raise RedactionError("rendered PDF page exceeds image limits")
+        pixmap = page.get_pixmap(dpi=300, colorspace=pymupdf.csRGB, alpha=False)
+        return Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+
+
+def propose_pdf(source: Path, work: Path, doc_id: str, *, allow_download: bool = False) -> None:
+    """Create independently reviewable page candidates for one explicit PDF."""
+    import pymupdf
+
+    if not re.fullmatch(r"D[0-9]{4,8}", doc_id):
+        raise RedactionError("PDF document ID must match D plus 4-8 digits")
+    if source.stat().st_size > MAX_BYTES:
+        raise RedactionError("input exceeds size limit")
+    source_hash = digest(source)
+    with pymupdf.open(source) as document:
+        if not document.is_pdf or document.needs_pass or not 1 <= len(document) <= 50:
+            raise RedactionError("an unencrypted PDF with 1-50 pages is required")
+        page_ids = [f"{doc_id}-p{number:03d}" for number in range(1, len(document) + 1)]
+    if (work / doc_id).exists() or any((work / page_id).exists() for page_id in page_ids):
+        raise RedactionError("document ID already exists; revise existing pages or choose a new ID")
+    for page_id in page_ids:
+        if digest(source) != source_hash:
+            raise RedactionError("source changed during processing")
+        record = propose(source, work, page_id, allow_download=allow_download)
+        print(f'{page_id} v001 candidate SHA-256 {record["candidate_sha256"]}; review required')
 
 
 def ocr_words(image: Image.Image) -> tuple[str, list[Word]]:
@@ -365,13 +408,14 @@ def write_json_new(path: Path, value: dict) -> None:
 def propose(source: Path, work: Path, doc_id: str, *, manual: list[list[int]] | None = None,
             drop_masks: list[int] | None = None, allow_download: bool = False, redetect: bool = False) -> dict:
     if not ID_RE.fullmatch(doc_id):
-        raise RedactionError("document ID must match D plus 4-8 digits")
+        raise RedactionError("document ID must match D plus 4-8 digits, optionally followed by -pNNN")
     source = source.resolve(strict=True)
     work = work.resolve()
     if work == source.parent or work in source.parents or source.parent in work.parents:
         raise RedactionError("private workspace must be separate from originals")
     source_hash = digest(source)
-    image = load_image(source)
+    page_number = int(doc_id.rsplit("-p", 1)[1]) if "-p" in doc_id else None
+    image = load_pdf_page(source, page_number) if page_number is not None else load_image(source)
     work.mkdir(parents=True, exist_ok=True, mode=0o700)
     work.chmod(0o700)
     folder = work / doc_id
@@ -446,6 +490,9 @@ def propose(source: Path, work: Path, doc_id: str, *, manual: list[list[int]] | 
               + len(drop_indices),
               "requirements": requirements, "ocr_word_count": ocr_word_count, "status": "pending",
               "tool_version": TOOL_VERSION, "model": MODEL_ID, "created_at": datetime.now(timezone.utc).isoformat()}
+    if page_number is not None:
+        record.update(source_document_id=doc_id.split("-p")[0], page_number=page_number,
+                      source_type="pdf", render_dpi=300)
     write_json_new(target / "record.json", record)
     return record
 
@@ -463,7 +510,7 @@ def approval_valid(approved: Path, decision: dict) -> bool:
     if decision["choice"] != "keep":
         return False
     name = decision.get("export_name", "")
-    if not re.fullmatch(r"D[0-9]{4,8}-v[0-9]{3}-[0-9a-f]{12}\.png", name):
+    if not re.fullmatch(r"D[0-9]{4,8}(?:-p[0-9]{3})?-v[0-9]{3}-[0-9a-f]{12}\.png", name):
         return False
     image_path = approved / name
     manifest_path = image_path.with_suffix(".json")
@@ -516,6 +563,10 @@ def decide(work: Path, approved: Path, doc_id: str, version: int, sha256: str, c
                     "removed_mask_count": record.get("removed_mask_count", 0),
                     "tool_version": TOOL_VERSION, "model": MODEL_ID, "threshold": THRESHOLD, "padding_pixels": PADDING,
                     "export_sha256": sha256, "approval_status": "kept"}
+        if record.get("source_type") == "pdf":
+            manifest.update(source_document_id=record["source_document_id"],
+                            page_number=record["page_number"], source_type="pdf", render_dpi=record["render_dpi"])
+            manifest["page_group"] = record["source_document_id"]
         manifest_path = approved / name.replace(".png", ".json")
         write_json_new(manifest_path, manifest)
         decision["export_name"] = name
@@ -682,7 +733,7 @@ def main(argv: list[str] | None = None) -> int:
     for command in ("propose", "revise"):
         item = sub.add_parser(command)
         item.add_argument("source", type=Path, nargs="?" if command == "revise" else None,
-                          help="one explicit JPEG, PNG or WebP path; revise can reuse the private source mapping")
+                          help="one image path, or a PDF with a page ID (-pNNN); revise can reuse the private source mapping")
         item.add_argument("--work", type=Path, required=True, help="private workspace outside the repository")
         item.add_argument("--id", required=True)
         item.add_argument("--mask", nargs=4, type=int, action="append", metavar=("X0", "Y0", "X1", "Y1"), default=[])
@@ -691,6 +742,11 @@ def main(argv: list[str] | None = None) -> int:
             item.add_argument("--drop-mask", type=int, action="append", default=[], metavar="INDEX",
                               help="remove a mask by its zero-based index from the latest candidate")
         item.add_argument("--allow-model-download", action="store_true")
+    item = sub.add_parser("propose-pdf", help="render and propose masks for every PDF page locally")
+    item.add_argument("source", type=Path)
+    item.add_argument("--work", type=Path, required=True)
+    item.add_argument("--id", required=True, help="neutral report ID, e.g. D0017; pages get -p001, -p002, ...")
+    item.add_argument("--allow-model-download", action="store_true")
     item = sub.add_parser("review")
     item.add_argument("--work", type=Path, required=True)
     item.add_argument("--approved", type=Path, required=True)
@@ -700,7 +756,9 @@ def main(argv: list[str] | None = None) -> int:
     item.add_argument("--approved", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command in {"propose", "revise"}:
+        if args.command == "propose-pdf":
+            propose_pdf(args.source, args.work, args.id, allow_download=args.allow_model_download)
+        elif args.command in {"propose", "revise"}:
             if args.command == "propose" and (args.work / args.id).exists():
                 raise RedactionError("document ID already exists; use revise")
             if args.command == "revise" and not (args.work / args.id).exists():

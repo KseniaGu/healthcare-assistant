@@ -1,72 +1,119 @@
-# Proposed next step: prepare a bounded SFT pilot
+# Correction-aware synthetic dataset for the SFT pilot
 
-[Research status](../README.md) · [Completed evaluations](evaluations.md)
+**Current plan — 2026-09-28.** The next session should implement local dataset
+generation and deliver a reviewable packet. CA1 policy/prompt approval and real
+annotation are complete. Training, GPU provisioning, new model evaluations and
+external parser/teacher requests are separate tasks. This plan replaces superseded
+literal-only and four-condition experiment proposals; historical evidence is retained.
 
-**Proposal, not an executed or authorized training run.** The first deliverable is
-an inspectable seed-data and evaluation packet, not a synthetic dataset or model.
+## Task and size
 
-## Why consider SFT?
+Input: fictitious **parser-like text**. Output: JSON following the approved
+[CA1 contract](correction_policy.md), with English extraction warnings. Do not
+rewrite the production prompt or train on real reports in this task.
 
-The untuned models still make contract and coverage errors on readable inputs.
-Source-backed OCR corrections did not prevent either model from missing UniLab's
-five secondary-column measurements. Qwen also retained abnormality markers inside
-values. These are plausible supervised-learning targets, but table representation
-and deterministic marker handling remain alternative explanations or remedies.
-SFT will not repair upstream missing text or the host's MPS memory pressure.
+| Dataset | Training reports | Validation reports | Purpose |
+| --- | ---: | ---: | --- |
+| Existing CA1 smoke subset | 16 | 8 | Technical training/tokenization checks |
+| Next learning pilot, proposed default | 320 total | 64 total | Test whether adaptation helps on real text |
 
-## Prepare before generating data
+Counts are complete reports, not rows. Include the existing corrected smoke pairs
+within these totals, preserving IDs and split membership. Keep any corrected variant
+of an existing example in the same split and record the change; do not rewrite the
+frozen packet. The 320/64 dataset does not exist yet. Generate CA1 targets only;
+there is no requirement to generate/train a second literal dataset.
 
-- **Annotation policy:** specify paired percentage/absolute columns without invented
-  names or units, direct reference cells, printed abbreviations, marker removal and
-  warning semantics. Version any future policy change; retain all historical labels
-  and scores. The previously accepted missing-unit detail in an omission warning
-  is non-critical and is not a new blocker.
-- **Seed inventory:** review privacy, reuse provenance, legibility and source/template
-  relationships. Group duplicate pages and reports. The sixteen approved images
-  are layout evidence; three now have reviewed targets on corrected parser text.
-  The selected new organizations do not overlap the original ones, per the user.
-- **Holdout design:** propose organization/template groups before creating variants.
-  Keep B reserved; never use its small-model errors for prompt, model or training
-  selection. B already informed the contract. Additional withheld real reports are
-  needed for stronger prospective evidence.
-- **Stable comparison:** pick one base checkpoint and reproducible inference settings.
-  Compare untuned and SFT versions using the same runtime, precision, template,
-  prompt, constraints, context and decoding. Quantization/runtime diagnostics are
-  separate experiments, not evidence of SFT improvement.
+## Allowed source evidence
 
-## Small training experiment, if approved afterward
+Read the role manifest as metadata, then inspect only eligible development content.
+The [inventory](../../data/research/report_inventory.md) maps all artifacts.
 
-Start with fully fictitious parser-text/JSON pairs derived from permitted layouts.
-This directly matches the training boundary and is simpler than generating PDFs.
-Include ordinary reports as well as missing cells, qualitative values, ranges,
-inequalities, date roles and paired columns. Keep validation variants separate
-from training and keep every template family together.
+| Role | Sources | Use |
+| --- | --- | --- |
+| Development | A1–A4 (Invitro), C1 (Gemotest); D0002/D0011/D0012 (Lab4U); D0006/D0007 (CMD); D0014–D0016 (UniLab) | Conventions, realistic text/layout characteristics and development checks |
+| Reserved | B1–B4 and D0017/D0018 (KDL); D0003–D0005 (CitiLab); D0008/D0009 (Helix) | Later fixed evaluation only; no generation, training or checkpoint selection |
+| Excluded | D0001, D0013 | No eligible target; do not use as generation evidence |
+| Layout-only | D0010 (Helix) | No scoring or generation; its organization is reserved |
 
-Generate PDFs only if a specific data gap requires sampling realistic parser
-artifacts. Budget parsing separately and independently check the resulting labels.
-Never assume Gemini responses are gold or copy real result patterns into synthetic
-training examples without a separate review.
+Development evidence is under `data/research/extraction/sft-correction-v1/real/<ID>/`:
+`input.txt`, `target.json`, `review.json`. Real reports remain outside synthetic
+train/validation JSONL. Do not reuse real result vectors or patient/admin text.
+Keep source reports, pages, panels, duplicates and transformed variants grouped.
+Different file hashes do not establish independence. Reserved data have prior
+project exposure; describe them as withheld from adaptation, not never inspected.
 
-Use one small LoRA SFT configuration; consider QLoRA only if required by training
-memory. Select checkpoints on training-organization validation data. No RL,
-DPO/GRPO, end-to-end image/PDF training or deployment optimization is proposed.
-Dataset size, hardware, cost and acceptance thresholds must be agreed before a run.
+## Generation requirements
 
-## How to decide whether it worked
+- Generate reproducibly from structured fictitious records and explicitly designed
+  layouts. Use a fixed seed and a compact manifest. No synthetic PDFs or API calls.
+- Design splits **before** variants. A layout family and base scenario/source group
+  belong to one split. Preserve the smoke's eight training and two validation
+  family memberships; add independent families where useful. Changing values,
+  dates or lab labels alone does not create a new layout family.
+- Avoid filling validation with near-clones. Vary row counts, panels, date roles,
+  missing information, alignment, wrapping and artifact combinations within each
+  family. Validation may share CA1 rules but not training templates/base scenarios.
+  Document layout inspiration separately from shared annotation conventions;
+  validation need not pretend to have a real source layout.
+- Include mostly ordinary reports, clean controls and a smaller difficult subset.
+  Suggested buckets: 192 ordinary, 80 layout/parser variation, 48 targeted difficult
+  training reports; 38/16/10 validation. These are design defaults, not production
+  prevalence. Cover chemistry, hematology, urine and qualitative tests.
+- Cross-cover bounded OCR repairs and ambiguity/nulls; name-plus-code cells; paired
+  percentage/absolute columns; wrapped cells; precision, commas, inequalities and
+  measured ranges; missing/dash units; flags versus qualitative +/-; date precedence;
+  direct references versus commentary; attached panels; pending/history exclusions;
+  unnamed observations and supported English warnings.
+- Derive targets from **the rendered visible text under CA1**. Keep a recoverable
+  spelling repair, but never restore deleted numbers, units or names from the hidden
+  generating record. A missing value becomes null with the applicable warning; an
+  unnamed row is omitted with the required warning. Preserve numeric information
+  and qualitative polarity. Record evidence and reasons for repairs/abstentions.
 
-Keep exact historical metrics, and predeclare a separate source-aligned assessment
-of missing observations, values, units, inequalities, references and dates. This
-prevents presentation mismatches from obscuring substantive errors without relaxing
-exact scores after seeing results. Assess warning meaning separately.
+## Implementation and output
 
-Report paired untuned/SFT changes by report and organization, including complete
-report passes, failure rates and runtime. Long correlated panels must remain
-visible separately. Improvement on training layouts alone is insufficient. Require
-meaningful held-out improvement without new critical value/unit/inequality or
-invented-reference errors. Decide numerical thresholds before training; the current
-small corpus cannot support a deployment claim even if every example passes.
+Reuse the helpers listed in [preparation.md](preparation.md#reusable-code-for-the-next-dataset).
+Implement the smallest research-only generator/validator needed. Existing builders
+are frozen-packet materializers, not a general 320-example generator; do not just
+raise their count assertions or repeat their templates with different numbers.
 
-Stop or revise the proposal if inference is unstable, labels are ambiguous, data
-are unsuitable, or the untuned model already meets the agreed target on additional
-withheld reports. A negative result is useful; a substantial training run is not
-the default next step.
+Write one new gitignored directory, proposed `data/research/extraction/sft-pilot-v1/`:
+
+- `train.jsonl`, `validation.jsonl`: ID plus system/user/assistant messages; the
+  assistant content is a JSON string. Use the exact CA1 system prompt and existing
+  report wrapper. Keep provenance out of model messages.
+- One manifest holding seed, IDs, splits, families, source groups, smoke membership,
+  eligible source references, transformations, review status, and prompt/schema/
+  tokenizer/code hashes. Avoid a directory or JSON file for every synthetic row.
+- Token counts (input, supervised, total; p50/p95/max), coverage and duplicate checks,
+  review findings, checksums and one readable README. Save tokenized IDs/labels only
+  once if needed for downstream training; they are derivable from the JSONL.
+
+Use Qwen/Qwen3-4B-Instruct-2507 tokenizer revision
+`cdbee75f17c01a7cc42f958dc650907174af0554`, cached at
+`data/research/extraction/sft-smoke-v1/tokenizer/`. Verify its provenance hashes.
+The complete native chat, including JSON completion and end token, must fit **8,192
+tokens** with no truncation. Supervise only assistant completion/end tokens;
+system, user and later padding labels are -100. SFT has no `response_json_schema`
+API argument: validate targets locally, without adding schema text to the prompt.
+
+## Acceptance and handoff
+
+Check every pair for schema/date validity, row/subcolumn coverage, required warnings,
+visible evidence, number/polarity preservation, duplicate inputs, near-duplicate
+families across splits, excluded provenance, token fit and completion boundaries.
+Tests should cover these failure modes with small fictitious fixtures; structural
+validation alone is not independent evidence that labels are correct.
+
+Manually review all 64 validation pairs and at least 64 stratified training pairs,
+including every family/transformation, every smoke pair, and every rare or ambiguous
+case (expand the sample if necessary). A systematic defect requires fixing and
+rechecking its entire family/transformation. Mark assistant review separately from
+user acceptance. Deliver unresolved cases explicitly rather than guessing.
+
+Update the research summary and guide with the actual generator command, verified
+counts, review results and limitations. No new inference is a prerequisite. Future
+training should begin with the 16/8 mechanics check, then use the learning dataset
+from fresh source weights. Assess untuned versus tuned models under identical CA1,
+precision/runtime and decoding conditions, with reserved reports kept out of tuning.
+Hardware, training hyperparameters and spending should be settled in that later task.

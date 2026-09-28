@@ -4,3 +4,4 @@ numpy>=1.26,<2
 opencv-python-headless>=4.10,<4.12
 gliner==0.2.24
 transformers>=4.51.3,<5
+PyMuPDF>=1.26.6,<2
