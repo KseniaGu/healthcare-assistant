@@ -101,8 +101,10 @@ drafts and source-bound corrections are retained. D0001/D0013 are explicitly
 excluded. Ten reserved candidates fit 8K; D0018 needs 9,696 tokens and is retained
 for longer-context evaluation. The maximum synthetic conversation is 4,092 tokens.
 36 offline tests pass; 658 historical/source hashes remain unchanged. This is data
-preparation, not a new model score or evidence of SFT improvement. The packet awaits
-user acceptance; all historical evaluations below are unchanged.
+preparation, not a new model score or evidence of SFT improvement. At that
+date the original preparation packet awaited acceptance. The later
+[v2 synthetic packet](../../data/research/extraction/sft-pilot-v2/README.md)
+was accepted on 2026-09-29. All historical evaluations below are unchanged.
 
 ## Contract and scoring
 

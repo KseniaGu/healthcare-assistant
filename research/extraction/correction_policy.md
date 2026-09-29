@@ -19,7 +19,9 @@ The frozen policy/packet still contain their original “proposal/awaiting accep
 labels and a four-condition experiment suggestion. Those are historical snapshots:
 policy/prompt approval is recorded here; the current dataset plan supersedes that
 experiment suggestion. Do not change those hashed bytes to refresh their status.
-New generated examples still require their own review and user acceptance.
+The [v2 synthetic packet](../../data/research/extraction/sft-pilot-v2/README.md)
+was later reviewed and explicitly accepted on 2026-09-29. Future generated
+examples still require their own review and user acceptance.
 
 ## Contract summary
 

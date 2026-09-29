@@ -172,4 +172,4 @@ directories; these are not side-effect-free offline checks.
 - [v4 storage update, migration and historical recovery](v4_application_update.md)
 - [Research status and next steps](../research/README.md)
 - [Prompt contract and evaluation results](../research/extraction/evaluations.md)
-- [Proposed small-model training experiment](../research/extraction/plan.md)
+- [Accepted CA1 dataset and training-pipeline handoff](../research/extraction/README.md#training-pipeline-handoff)
