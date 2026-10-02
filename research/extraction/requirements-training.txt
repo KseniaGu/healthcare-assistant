@@ -1,0 +1,8 @@
+# Install in Lightning Studio's default environment with CUDA PyTorch already present.
+# The accepted tokenizer cache was created with Transformers 5.16.1 / tokenizers 0.23.2.
+transformers==5.16.1
+tokenizers==0.23.2
+peft==0.21.0
+accelerate==1.15.0
+bitsandbytes==0.50.2
+jsonschema==4.25.1

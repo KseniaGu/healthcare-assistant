@@ -2,6 +2,177 @@
 
 [Research status and next steps](../README.md) · [Runner instructions](README.md)
 
+## Matched CA1 real-report evaluations — 2026-10-01
+
+The user completed separate Lightning CUDA comparisons on all 13 real
+development reports and 11 reserved reports using the same pinned Qwen base,
+selected `checkpoint-80` adapter, NF4/BF16 precision, prompt, greedy decoding,
+and exact scorer. The [development archive](../../data/research/extraction/ca1-eval-development-v1.tar.gz)
+has SHA-256 `d0ceeb1e2e8af2ff62e8e2ba3499d005a7309f76ead89eaeadd99e66c9e8826a`;
+the [reserved archive](../../data/research/extraction/ca1-eval-reserved-v1.tar.gz)
+has SHA-256 `fc31b47eae2d3f56d81e8a0ddfeeaba95383043028ea290a913a35a376475588`.
+The completed runs used the original separate private input archives:
+[training](../../data/research/extraction/ca1-lightning-preflight.tar.gz)
+SHA-256 `ef7552ffd25a576dd2f43bccc5969666d1eeac6b95efaf03023b3391d29eb5fa`,
+[development](../../data/research/extraction/ca1-development-eval-input.tar.gz)
+SHA-256 `9308b51eaf0a3beedb55cba5f916c0fbea4b44fa7a1fdb4a6485906189ca6c7a`,
+and [reserved](../../data/research/extraction/ca1-reserved-eval-input.tar.gz)
+SHA-256 `e9db5134b4b013bc31bb8ec3e696db3df1069ca4811ed516b3cf78f4e09c04e5`.
+The later [single Studio input archive](../../data/research/extraction/ca1-lightning-input-v1.tar.gz)
+combines the same necessary code and data for simpler setup; it was assembled
+after these evaluations and did not produce their saved outputs.
+
+Both manifests say `completed` and match the accepted packet and selected run
+record. All 48 saved responses reached EOS. Case membership, individual scores,
+and aggregate summaries were reproduced against the local targets. The
+[private per-report review](../../data/research/extraction/ca1-real-eval-review-v1.md)
+records each pair and selected source-aligned errors.
+
+| Set and measure | Base | Adapted |
+| --- | ---: | ---: |
+| Development: schema-valid / exact dates | 13/13 / 11/13 | 13/13 / 13/13 |
+| Development: exact records / 292 | 94 (32.2%) | 131 (44.9%) |
+| Development: exact-record precision | 39.0% | 57.7% |
+| Development: fully matching parsed JSON | 0/13 | 1/13 |
+| Reserved, 10 standard: schema-valid / exact dates | 8/10 / 7/10 | 10/10 / 8/10 |
+| Reserved, 10 standard: exact records / 130 | 42 (32.3%) | 56 (43.1%) |
+| Reserved, long D0018: exact records / 17 | 3 (17.6%) | 2 (11.8%) |
+| Reserved, all 11: exact records / 147 | 45 (30.6%) | 58 (39.5%) |
+| Reserved, all 11: exact-record precision | 35.4% | 40.0% |
+| Reserved, all 11: fully matching parsed JSON | 0/11 | 0/11 |
+
+The adapter gains 37 exact development rows and 13 exact reserved rows over
+the matched base. The improvement is uneven: it improves exact rows on five
+development reports and three reserved reports, loses ground on four and two
+respectively, and ties on the rest. Its development output contains 227 actual
+rows against 292 expected. The entire 65-row count shortfall occurs in four
+reports: A3 misses 43, A2 misses 12, and D0014/D0016 each miss five. A2 is a
+new truncation-like omission despite normal EOS; both variants largely omit
+A3's visible panel and the paired absolute-count columns in D0014/D0016.
+In contrast, the adapted reserved output contains 145 rows against 147
+expected: the low exact score there mainly reflects wrong names, values,
+units, and reference ranges, not missing row count. `missing_exact_records`
+counts all nonmatching rows, so it must not be read as an omission count.
+
+Source checks found consequential content errors: D0005 loses qualitative
+polarity, D0015 loses strength/titre detail, and D0008 omits the overall positive
+confirmation result; D0003 and D0018 mislabel hormone units; and D0008/D0009
+assign administrative dates where targets have no eligible date. The adapted
+outputs omit required warnings in B3, D0008, and D0009. The long D0018 case
+completed with a 16,384-token budget but regressed from three to two exact
+records and omitted one result. Schema validity, normal EOS, and near-correct
+row counts therefore do not establish safe extraction. Exact matching also
+penalizes harmless formatting differences, so the scores are not a complete
+semantic assessment; the cited omissions, polarity, date, and unit errors are
+confirmed against the approved targets and selected source lines.
+
+The 64-case synthetic validation recall of 97.4% did not transfer to these
+real reports. The development set is exploratory because its layouts informed
+the packet. The reserved set was evaluated with the fixed checkpoint, but has
+only 11 heterogeneous reports and cannot establish deployment accuracy. This
+adapter is **not ready for unattended clinical extraction** or replacement of
+the production Gemini path. Keep these reserved results as the historical test;
+model or prompt changes informed by them require a new held-out set for a fresh
+final evaluation. The next research step is to review the development failures
+by source layout and define acceptance criteria before considering another
+training or extraction change.
+
+## Matched CA1 synthetic validation generation — 2026-10-01
+
+The user ran the selected `checkpoint-80` adapter and its base model in one
+Lightning CUDA evaluation. The downloaded [archive](../../data/research/extraction/ca1-eval-full.tar.gz)
+has SHA-256 `f82de82d12bd36fbc41c070eeb3e00d4c86b13f5f00806f64fdedccdbf594b77`.
+Its manifest identifies the pinned Qwen revision and accepted v2 packet, and
+its run-record hash matches the locally verified selected adapter. It records
+NF4/BF16, greedy decoding, EOS stopping, and the same 8,192-token context
+limit for both variants. All 64 accepted validation IDs have one base and one
+adapted response. All 128 reached EOS, and the largest recorded total context
+was 4,008 tokens. I parsed every response, rescored it against the frozen
+targets, and reproduced both aggregate summaries. The 13 real development and
+all reserved reports were absent from this cloud evaluation.
+
+| Measure | Base | Adapted |
+| --- | ---: | ---: |
+| Schema-valid reports | 63/64 | 64/64 |
+| Exact dates | 40/64 | 63/64 |
+| Exact records, ignoring row order | 1,034/1,251 | 1,219/1,251 |
+| Record precision / recall | 86.1% / 82.7% | 99.6% / 97.4% |
+| Exact records in the correct row position | 949/1,251 | 1,101/1,251 |
+| Matching fields at the same row position | 4,290/5,004 | 4,440/5,004 |
+| Scorer `strict_pass` | 11/64 | 47/64 |
+| Entire parsed JSON equal to target | 11/64 | 49/64 |
+
+| Validation family | Base strict | Adapted strict |
+| --- | ---: | ---: |
+| Transposed smoke | 2/4 | 3/4 |
+| Numbered-block smoke | 0/4 | 2/4 |
+| Chemistry | 2/14 | 6/14 |
+| Hematology | 4/14 | 11/14 |
+| Urine | 1/14 | 12/14 |
+| Qualitative | 2/14 | 13/14 |
+
+On paired reports, 36 changed from strict failure to pass, 11 passed under
+both variants, and none changed from pass to failure. The scorer's
+`strict_pass` requires *empty* warning lists in both target and prediction;
+two adapted outputs exactly match targets that contain required warnings, so
+the 47/64 strict count understates full JSON equality by two. This is a
+scoring convention, not two extraction errors.
+
+The adapted model still misses 28 actual result rows in four two-column
+chemistry reports (`v-chemistry-02-01` through `-04`), including 12/29 rows in
+`-04`. These account for 28 of its 32 missing **exact** records; the other
+four are field substitutions. All seven reports in this two-column chemistry
+subfamily fail the strict check. The model also adds one pending confirmation
+as a result in `v-chemistry-02-07`, which should have been excluded. Two
+chemistry reports contain all correct records but in the wrong order. The one
+remaining wrong date is `v-urine-01-07`, where a print date was selected even
+though no eligible date is visible. Seven adapted warning lists differ from
+their targets: three are wording or punctuation differences for the same issue,
+three omit required warnings, and one falsely claims a missing value. The four
+field substitutions are a missing unit, an unsupported unit, an added reference
+range, and a copied dash where a urine value is missing. Exact-record counts
+fell in two chemistry reports despite the aggregate improvement. The 64
+synthetic reports show a strong gain in this matched setup, but these failures
+prevent a reliability claim for complete CA1 extraction.
+
+This validation split selected the checkpoint by loss, so the comparison is
+exploratory. The reports are fictitious and generator-related; they do not
+establish performance on real documents. The historical Ollama Q8 baseline is
+not a matched control. The subsequent separate real-report evaluations are
+reported above.
+
+## CA1 synthetic validation loss after Lightning training — 2026-09-30
+
+The user supplied the completed `run.json` and terminal output for a fresh
+three-epoch QLoRA run on one NVIDIA L4. The record pins the accepted v2 packet
+SHA-256 `bad1ed2e70de8886a1bb2a57e2ce9c782009e2e2c189912168dd1c570601b4e0`
+and Qwen revision `cdbee75f17c01a7cc42f958dc650907174af0554`. Its
+trainer-code SHA-256 matches the current `train_ca1.py`. All 120 optimizer
+steps completed in 4,990 seconds; peak allocated VRAM was 14.18 GiB. W&B
+[recorded the run](https://wandb.ai/gu-fuku-ro-/ca1-pilot-v2/0aw4uf5v).
+The selected-adapter [archive](../../data/research/extraction/ca1-best-adapter.tar.gz)
+was copied and verified locally (SHA-256
+`e880cf8637d8df52f80a0073f0922ea176fd4d4fa5db56bef85ad621893f2344`).
+It contains exactly the completed `run.json`, `checkpoint-80` adapter config,
+and a readable 132,187,888-byte safetensors file with 504 LoRA tensors. The
+full optimizer/checkpoint history remains in Lightning and was not copied.
+
+| Epoch | Optimizer step | Synthetic validation loss |
+| ---: | ---: | ---: |
+| 1 | 40 | 0.01391129 |
+| 2 | 80 | **0.01355948** |
+| 3 | 120 | 0.01509854 |
+
+The runner selected `checkpoint-80`, the lowest of the three recorded losses.
+Loss rose after epoch two, so the final checkpoint is not the selected
+candidate. These are token-level losses on the 64 fictitious validation
+reports used for checkpoint selection. Generated-output evidence is reported
+above; loss alone does not measure schema compliance or extraction accuracy.
+The user's Mac passed a PyTorch 2.8.0 MPS/BF16 tensor check, but model loading
+and generation there remain untested. Real and reserved reports were not
+training records or checkpoint-selection data; their later generation results
+are reported above.
+
 ## Approved CA1 untuned Qwen baseline — 2026-09-28
 
 Final results for **all 13 real development reports and eight synthetic validation
@@ -12,7 +183,8 @@ provide the evidence behind the tables; individual outputs are linked below.
 Qwen3-4B-Instruct-2507 Q8_0 on Ollama 0.34.3; unconstrained decoding with local
 schema validation, 8,192-token context, temperature 0 and seed 42. All 21 saved
 responses stopped normally, matched pinned input-token counts and fit the context
-limit. Reserved reports were not evaluated. No training has run.
+limit. Reserved reports were not evaluated. At the time of this baseline, no
+training had run.
 
 | Measure | Real development | Synthetic validation |
 | --- | ---: | ---: |

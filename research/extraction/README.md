@@ -42,16 +42,17 @@ The latest [correction-aware comparison guide](correction_policy.md) and
 [review packet](../../data/research/extraction/sft-correction-v1/README.md) add paired
 CA1 targets and revised synthetic validation without replacing the literal packet.
 CA1 and the revised v2 synthetic packet are user-accepted. The literal variant
-is historical comparison data. Training has not run.
+is historical comparison data. The completed [Lightning training and matched
+evaluations](training.md) used the v2 packet.
 
 The [preparation guide](preparation.md) documents the new staged command and
 [private packet](../../data/research/extraction/sft-smoke-v1/README.md). The local
 16/8 synthetic subset and all 14 new drafts are assistant-reviewed; twelve new
 drafts have usable targets and D0001/D0013 are explicitly excluded. Including nine
 historical and three raw-pilot targets gives 24 usable real targets. D0018 exceeds
-8K (9,696 tokens), so ten reserved candidates fit the proposed 8K evaluation. All KDL sources
-(B1–B4, D0017/D0018), CitiLab and Helix are withheld from synthetic generation.
-No training has run. The completed untuned CA1 scores are linked below.
+8K (9,696 tokens); its completed reserved evaluation used a separate 16K
+budget. All KDL sources (B1–B4, D0017/D0018), CitiLab and Helix were withheld
+from synthetic generation. The completed untuned CA1 scores are linked below.
 
 ## CA1 synthetic learning packet
 
@@ -67,7 +68,6 @@ validation families, four domains, 0 duplicate inputs, 0 detected split leaks,
 and 0 cross-split near-duplicate candidates. All 384 chats fit 8,192 tokens;
 the maximum is 4,742. The assistant reviewed all 64 validation and 85
 stratified training pairs; see the packet review for fixes and limitations.
-No training, new inference or external requests ran.
 
 ```sh
 /opt/venv/bin/python -m research.extraction.generate_sft_pilot_v2 --output /tmp/sft-pilot-v2-rebuild
@@ -128,11 +128,10 @@ Train only on the training split; use the validation split for development
 checks. Real reports supplied layout conventions but are absent from these
 JSONL files. The reserved KDL, CitiLab and Helix reports remain withheld from
 adaptation and checkpoint selection. The completed untuned CA1 Q8/Ollama
-baseline is useful diagnostic evidence, but a later base/tuned comparison needs
-matched precision, runtime, prompt and decoding conditions. Dataset acceptance
-did not select a training method, hardware, budget or evaluation run. The
-user-accepted dataset status is already recorded; the next session need not
-request acceptance of these same pairs again.
+baseline is diagnostic evidence; the later [Lightning comparison](evaluations.md)
+used matched precision, runtime, prompt and decoding. Dataset acceptance did
+not itself select a training method. The [research-only QLoRA pipeline](training.md)
+subsequently completed one run and matched evaluations.
 
 ## Approved CA1 untuned baseline
 
@@ -140,10 +139,10 @@ The [final evaluation report](evaluations.md#approved-ca1-untuned-qwen-baseline-
 contains all 13 development reports and eight synthetic validation examples in one
 set of tables, with per-example output links and reviewed metrics. The existing
 Qwen3-4B-Instruct-2507 Q8_0 model used Ollama 0.34.3, the approved CA1 prompt,
-English warnings and unconstrained generation within 8K. Reserved reports stay closed.
-These results are not directly comparable with older schema-constrained scores or
-BF16 training runs. All live allowances are consumed. `evaluate_ca1 score --output
-PATH` recomputes positional scores offline; source alignment and warning semantics
+English warnings and unconstrained generation within 8K. That baseline did
+not use reserved reports. These results are not directly comparable with older
+schema-constrained scores or the later NF4/BF16 run. All live allowances
+are consumed. `evaluate_ca1 score --output PATH` recomputes positional scores offline; source alignment and warning semantics
 also require the saved manual review. Preserve frozen artifacts when rescoring.
 
 ## Tools and environments
@@ -152,6 +151,8 @@ also require the saved manual review. Preserve frozen artifacts when rescoring.
 | --- | --- | --- |
 | `prepare_correction_variant` | Rebuild reviewed historical CA1/literal packet | Offline project environment and cached tokenizer |
 | `generate_sft_pilot_v2` | Generate or verify the revised 320/64 CA1 packet | `/opt/venv/bin/python`, offline cached tokenizer |
+| `train_ca1` | Check accepted packet; CUDA preflight and training | Offline check in `/opt/venv`; Lightning CUDA for model stages |
+| `evaluate_ca1_adapter` | Matched base/adapter generation and exact scoring; `--development-only` selects 13 eligible reports and `--reserved-only` selects 11 held-out reports | Matched synthetic, development, and reserved CUDA comparisons complete; MPS path untested |
 | `generate_sft_pilot` | Reproduce the failed historical v1 packet | `/opt/venv/bin/python`, offline cached tokenizer |
 | `evaluate_ca1` | Frozen CA1 local Qwen baseline and offline scoring | Completed allowances; no automatic retries |
 | `prepare_sft` | Bounded source preparation, real annotation, local smoke generation, validation and review packaging | Project dependencies plus pinned-tokenizer tooling; see preparation guide |

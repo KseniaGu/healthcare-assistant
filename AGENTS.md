@@ -9,6 +9,27 @@ Guidance for AI coding agents working in this repository.
 - Use clear names and straightforward control flow before adding comments.
 - Add comments only when they explain intent, boundary conditions, or non-obvious tradeoffs.
 
+## Code quality
+
+Write production-quality Python consistent with the surrounding code.
+
+Prefer:
+- small functions with one clear responsibility;
+- named domain types/dataclasses over loosely structured dictionaries;
+- explicit helper functions when validation or transformation has a distinct purpose;
+- descriptive names over comments explaining complicated code;
+- early returns and simple control flow over deeply nested logic.
+
+Avoid:
+- monolithic functions that mix validation, I/O, configuration, and execution;
+- unnecessary abstraction or helpers used only to make code look modular;
+- duplicated validation logic;
+- large inline comprehensions when a named operation would be clearer.
+
+Before finishing:
+- run Ruff, the type checker, and relevant tests;
+- review the diff for readability and simplify unnecessarily dense code.
+
 ## Docstrings
 
 Write docstrings when they help a future maintainer understand the role or contract of code. Do not add a docstring to every small helper by default.
