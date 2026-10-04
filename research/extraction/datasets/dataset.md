@@ -1,6 +1,6 @@
 # CA1 dataset contract and audit
 
-The research prompt and schema are separate from the production Gemini v4 prompt. The current builder reads the retained correction source, smoke source index, and pinned Qwen tokenizer, then writes a new immutable *candidate* packet. [Reproduction](../reproduction.md) gives commands. The accepted v2 packet remains historical evidence.
+The research prompt and schema are separate from the production Gemini v4 prompt. The current builder reads the retained correction source, smoke source index, and pinned Qwen tokenizer, then writes an immutable candidate packet. The v3 candidate was accepted after model-facing parity with the reviewed v2 packet; [reproduction](../reproduction.md) records its digest and commands. The accepted v2 packet remains historical evidence.
 
 ## Source roles
 

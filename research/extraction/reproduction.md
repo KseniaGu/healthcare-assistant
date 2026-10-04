@@ -1,6 +1,6 @@
 # Reproducing the maintained CA1 extraction experiment
 
-**Status:** Section A is the local refactor workflow. Sections B and C remain manual cloud procedures until a new accepted packet and selected adapter are available. Offline CLI and packet checks do not verify future VM execution. The historical v2 run and evaluations remain separate evidence; no refactored model training or adapter-dependent evaluation has run.
+**Status — 2026-10-04:** Section A completed locally: `ca1-sft-v3` was generated from committed source, matched the reviewed v2 packet model-facing content, and was accepted through separate parity evidence. Its offline `train_ca1 check` passes. Sections B and C remain manual cloud procedures; no refactored model training or adapter-dependent evaluation has run. Offline CLI and packet checks do not verify future VM execution.
 
 This is the canonical **operational** guide. Dataset design, source roles, and the v1 audit belong in [datasets/dataset.md](datasets/dataset.md); training recipe and environment rationale belong in [training/training.md](training/training.md); new-run scores and interpretation belong in [evaluation/evaluations.md](evaluation/evaluations.md), with the recorded CA1 baseline in [historical evaluations](evaluation/historical_evaluations.md). The [implementation plan](implementation_plan.md) defines migration gates. All detailed medical data and model artifacts remain under gitignored `data/`.
 
@@ -10,7 +10,7 @@ This is the canonical **operational** guide. Dataset design, source roles, and t
 - Packet: 320 fictitious training and 64 fictitious validation reports, including the corrected 16/8 smoke subset. No real reports are in training JSONL. The existing CA1 prompt/schema, messages, targets, IDs/splits, cached IDs/labels, and 8,192-token limit remain model-facing parity targets.
 - Training comparison platform: one NVIDIA L4 with CUDA BF16 and the pinned dependency stack. Training, longest-example preflight, and model-dependent evaluation run on the cloud VM, not in the development environment.
 - Evaluation: matched base/adapter generation, greedy decoding and EOS stop. Development = 13 real reports; reserved = 11 real reports. D0018 uses 16,384 total tokens. The reserved set has already been evaluated historically; rerunning it compares implementations, not independent final performance.
-- New packet and run paths must be immutable once accepted. The examples below use `ca1-sft-v3`, `ca1-run-v3`, and `ca1-eval-v3-*` as **planned artifact names**. Confirm the names in implementation; versioned artifacts are useful even though maintained Python modules are unversioned. A generated packet is a candidate until its separate `acceptance.json` binds the exact content digest to passing parity or completed changed-example review.
+- New packet and run paths must be immutable once accepted. `ca1-sft-v3` is the accepted local packet; `ca1-run-v3` and `ca1-eval-v3-*` are planned later cloud artifact names. Versioned artifacts are useful even though maintained Python modules are unversioned. A generated packet is a candidate until its separate `acceptance.json` binds the exact content digest to passing parity or completed changed-example review.
 
 ## A. Local preparation and deterministic checks
 
@@ -32,7 +32,7 @@ Dataset generation needs the pinned tokenizer but no model weights, CUDA, provid
 
 The source directory is the retained private CA1 correction packet, and the tokenizer directory is the pinned local tokenizer cache. These may be absent in a clean checkout. The builder must check source hashes, role eligibility, prompt/schema, review metadata, and tokenizer provenance before writing output. A missing or changed source is a stop condition, not permission to regenerate parser/teacher data.
 
-**Planned post-refactor commands:**
+The following input and historical-packet checks passed locally for the accepted v3 build:
 
 ```sh
 CA1_REPO_ROOT="$(pwd -P)"
@@ -89,11 +89,11 @@ poetry run python -m research.extraction.datasets.build_ca1_dataset \
 sha256sum "$CA1_PACKET/SHA256SUMS.json"
 ```
 
-The builder writes an immutable candidate payload with `manifest.json` for provenance and a canonical `SHA256SUMS.json` for integrity; it does **not** write `acceptance.json`. The `--verify` command checks the complete payload file set and hashes but does not accept the candidate. Define the content digest as SHA-256 of the exact `SHA256SUMS.json` bytes. That checksum file covers every payload file by sorted relative path, excluding itself and `acceptance.json`, and is written as UTF-8 JSON with sorted keys, compact separators, and one trailing newline. The final builder must record counts, 8,192-token fit, split/family isolation, source hashes, and the producing Git revision. Commit and pin the cleaned implementation before acceptance; do not record a dirty working tree as a reproducible source revision.
+The builder writes an immutable candidate payload with `manifest.json` for provenance and a canonical `SHA256SUMS.json` for integrity; it does **not** write `acceptance.json`. The `--verify` command checks the complete payload file set and hashes but does not accept the candidate. Define the content digest as SHA-256 of the exact `SHA256SUMS.json` bytes. That checksum file covers every payload file by sorted relative path, excluding itself and `acceptance.json`, and is written as UTF-8 JSON with sorted keys, compact separators, and one trailing newline. The accepted packet records 320/64 reports, 4,742 maximum complete tokens, isolated families, exact source hashes, and producing Git revision `43294f56ff6f59ae57d7d8264d06159de3af2b16`. Commit and pin any future cleaned implementation before building a replacement; a dirty working tree is rejected.
 
 ### A4. Produce review evidence and accept the packet
 
-The normal migration path is `model_facing_parity`. Compare parsed JSONL and the model-facing manifest fields; a serialization-only difference does not itself change the examples. The previous packet is anchored by the digest checked in A2. The planned command below writes a small passing evidence file **outside** the packet only after every assertion succeeds. Review it against the final packet field names during implementation.
+The completed v3 migration used `model_facing_parity`. Compare parsed JSONL and the model-facing manifest fields; a serialization-only difference does not itself change the examples. The previous packet is anchored by the digest checked in A2. The command below writes a small passing evidence file **outside** the packet only after every assertion succeeds; its fields were checked against the accepted v3 packet.
 
 ```sh
 CA1_PARITY_EVIDENCE="$CA1_REPO_ROOT/data/research/extraction/ca1-sft-v3-parity.json"
@@ -125,12 +125,14 @@ before_examples = {item["id"]: item for item in before_manifest["examples"]}
 after_examples = {item["id"]: item for item in after_manifest["examples"]}
 assert before_examples.keys() == after_examples.keys(), "Case membership changed"
 for identifier in before_examples:
-    for field in ("split", "family", "source_group", "input_sha256", "target_sha256"):
-        assert before_examples[identifier][field] == after_examples[identifier][field], (identifier, field)
-
-before_stats = json.loads((old / "statistics.json").read_text())
-after_stats = json.loads((new / "statistics.json").read_text())
-assert before_stats["max_total"] == after_stats["max_total"] == 4742
+    before, after = before_examples[identifier], after_examples[identifier]
+    for field in before.keys() | after.keys():
+        if field == "review_status":  # Immutable old review metadata differs from a new candidate.
+            continue
+        assert before.get(field) == after.get(field), (identifier, field)
+for name in ("statistics.json", "distribution.json"):
+    assert (old / name).read_bytes() == (new / name).read_bytes(), name
+assert json.loads((new / "statistics.json").read_text())["max_total"] == 4742
 
 record = {
     "basis": "model_facing_parity",
@@ -138,7 +140,8 @@ record = {
     "previous_packet_sha256": digest(old / "SHA256SUMS.json"),
     "result": "pass",
     "compared": ["train.jsonl", "validation.jsonl", "tokenized.jsonl",
-                 "model/revision", "prompt/schema/tokenizer", "example membership/hashes"],
+                 "model/revision", "prompt/schema/tokenizer", "all example fields except review status",
+                 "statistics/distribution bytes"],
     "example_count": len(after_examples),
 }
 if evidence.exists():
@@ -152,7 +155,7 @@ sha256sum "$CA1_PARITY_EVIDENCE"
 
 Compare distribution and coverage statistics separately and record any limitation. New code hashes, paths, review provenance, `acceptance.json`, and checksum-file bytes may differ without changing model-facing content. If any model-facing comparison fails, do **not** write or use parity evidence. Resolve accidental differences, or prepare a separate private `reviewed_changes` evidence file that identifies every intentional difference and its completed case-level review. That file must declare the same candidate content digest and a passing review result; it must not claim inherited approval from the previous packet.
 
-Choose **one** acceptance basis. These are planned post-refactor command shapes; finalize only the CLI spelling and evidence field names during implementation. The acceptance operation validates the evidence's basis, result, candidate digest, and required changed-example reviews; for parity it also compares the evidence's old-packet anchor with the historical digest supplied on the command line. It then atomically writes `acceptance.json`. It refuses to overwrite a different acceptance record.
+Choose **one** acceptance basis. The following CLI and evidence fields match the implementation. The acceptance operation validates the evidence's basis, result, candidate digest, and required changed-example reviews; for parity it also compares the evidence's old-packet anchor with the historical digest supplied on the command line. It then atomically writes `acceptance.json`. It refuses to overwrite a different acceptance record.
 
 For exact model-facing parity:
 
@@ -172,7 +175,7 @@ poetry run python -m research.extraction.datasets.packet accept \
   --evidence "$CA1_REVIEW_EVIDENCE"
 ```
 
-The record contains the packet content digest, producing Git commit matching `manifest.json`, selected basis, and evidence digest/reference; an acceptance timestamp may be added. It is excluded from `SHA256SUMS.json` and the content digest. Re-verify both gates after acceptance:
+The v3 record contains content digest `20d31cda44e955c60963b3da0f61add86cd20648e1041b69653d798a28af255f`, source commit `43294f56ff6f59ae57d7d8264d06159de3af2b16`, parity evidence digest `424231da3e22e7614416ea862480c872e17c70d70aa5d2dab8c1feb02841b435`, and the evidence basename. It is excluded from `SHA256SUMS.json` and the content digest. Re-verify both gates after acceptance:
 
 ```sh
 test -f "$CA1_PACKET/acceptance.json"
@@ -195,13 +198,13 @@ poetry run python -m pytest --noconftest research/extraction/tests
 git diff --check
 ```
 
-The `train_ca1 check` command in A4 validates packet integrity and acceptance offline; it does not run the `preflight` or `train` stages. The current suite must run without private files, GPU, network, or application database; separate private-packet integration tests may skip when inputs are absent. The active modules are checked by configured mypy; the maintained offline suite has no host-test directory. Record actual versions and results. Do not claim a test passed because it passed before the refactor.
+The `train_ca1 check` command in A4 validates packet integrity and acceptance offline; it does not run the `preflight` or `train` stages. The current suite must run without private files, GPU, network, or application database; separate private-packet integration tests may skip when inputs are absent. The active modules are checked by configured mypy; the maintained offline suite has no host-test directory. On 2026-10-04, Poetry lock consistency, Ruff, mypy (nine source files), and 41 offline extraction tests passed with Python 3.11.13. The accepted packet passed both `--verify` and `train_ca1 check` (320/64 cases; maximum 4,742 complete tokens). Do not claim a future run passed because these local checks passed.
 
 ### A6. Prepare private transfer archives
 
 After `acceptance.json` is written and `train_ca1 check` passes, create a **training-only** packet archive that includes the accepted packet and its acceptance record. Keep real-report evaluation inputs in a separate archive. The evaluation bundle contains only an ID/role index and the 24 approved `input.txt`/`target.json` pairs. The prompt and schema come from the accepted packet. Neither real-report text nor the detailed source `real_edits.json` belongs in the synthetic training JSONL or the transferred role index.
 
-**Planned post-refactor commands:**
+These archives were created and checked locally after acceptance:
 
 ```sh
 CA1_PACKET_ARCHIVE="$CA1_REPO_ROOT/data/research/extraction/ca1-sft-v3.tar.gz"
@@ -246,7 +249,7 @@ tar -C "$CA1_EVAL_STAGE" -czf "$CA1_EVAL_ARCHIVE" data/research/extraction/sft-c
 sha256sum "$CA1_PACKET_ARCHIVE" "$CA1_EVAL_ARCHIVE"
 ```
 
-**Implementation-time item:** verify that the final evaluator accepts this role-only bundle and that the archived files contain exactly 13 development and 11 reserved input/target pairs. Save archive digests before transfer; remove the temporary staging directory after confirming the archive. Do not include credentials, source images, provider responses, detailed edit evidence, or base-model weights in these archives.
+The evaluator accepted the staged role-only bundle offline: exactly 13 development and 11 reserved input/target pairs, with a 49-file archive (one index plus 48 case files). The packet archive has 29 files including acceptance. Packet archive SHA-256: `2f91300d9ebd61378d7b6ef299ecfcdd85b7de1c7149b6e205a96c70c655a74a`; real-evaluation archive SHA-256: `980122f4ca714eb54772ec358df178963e6cc89ed952cd85288bdaf27ca7bdee`. The temporary staging directory was removed after archive verification. Do not include credentials, source images, provider responses, detailed edit evidence, or base-model weights in these archives.
 
 ## B. Manual cloud training after refactoring
 
@@ -254,7 +257,7 @@ sha256sum "$CA1_PACKET_ARCHIVE" "$CA1_EVAL_ARCHIVE"
 
 ### B1. Supply operator-specific values and transfer inputs
 
-The following are concrete **implementation-time/operator items**: accessible repository URL, pinned cleaned commit SHA, VM image identifier with compatible PyTorch 2.8.0+cu128, VM SSH address or upload method, accepted packet archive basename and digest, and evaluation archive basename and digest. Fill them from the finished local migration; never use a moving branch name as the training revision.
+The source commit, archive names, and SHA-256 digests below are fixed by the completed local migration. Supply an accessible repository URL, a VM image with compatible CUDA PyTorch (historically 2.8.0+cu128), and a VM SSH address or private upload route before the manual run. Never use a moving branch name as the training revision.
 
 **Planned post-refactor commands on the development machine, when SSH is available:**
 
@@ -275,9 +278,9 @@ Use the provider's private upload interface if SSH is unavailable, then verify t
 set -euo pipefail
 CA1_VM_ROOT='/teamspace/studios/this_studio'
 CA1_REPO_URL='REPLACE_WITH_ACCESSIBLE_REPOSITORY_URL'
-CA1_REVISION='REPLACE_WITH_CLEANED_40_CHARACTER_COMMIT_SHA'
-CA1_PACKET_ARCHIVE_SHA256='REPLACE_WITH_RECORDED_PACKET_ARCHIVE_SHA256'
-CA1_EVAL_ARCHIVE_SHA256='REPLACE_WITH_RECORDED_EVAL_ARCHIVE_SHA256'
+CA1_REVISION='43294f56ff6f59ae57d7d8264d06159de3af2b16'
+CA1_PACKET_ARCHIVE_SHA256='2f91300d9ebd61378d7b6ef299ecfcdd85b7de1c7149b6e205a96c70c655a74a'
+CA1_EVAL_ARCHIVE_SHA256='980122f4ca714eb54772ec358df178963e6cc89ed952cd85288bdaf27ca7bdee'
 CA1_VM_REPO="$CA1_VM_ROOT/healthcare-assistant"
 CA1_PACKET="$CA1_VM_REPO/data/research/extraction/ca1-sft-v3"
 CA1_RUN="$CA1_VM_ROOT/ca1-run-v3"
@@ -431,25 +434,31 @@ Each output directory should contain `evaluation.json`, one base and one adapted
 for set_name in synthetic development reserved; do
   directory="$CA1_VM_ROOT/ca1-eval-v3-$set_name"
   test -f "$directory/evaluation.json"
-  python3 - "$directory" <<'PYTHON'
-import json
+  python3 - "$directory" "$CA1_PACKET" "$CA1_REAL_DATA" "$set_name" <<'PYTHON'
 import sys
 from pathlib import Path
+from jsonschema import Draft202012Validator, FormatChecker
+from research.extraction.datasets.packet import read_json, sha
+from research.extraction.evaluation.evaluate_ca1_adapter import cases, validate_saved_case
 from research.extraction.evaluation.scoring import summarize
 
-root = Path(sys.argv[1])
-report = json.loads((root / "evaluation.json").read_text())
+root, packet, real_data = map(Path, sys.argv[1:4])
+dataset = sys.argv[4]
+report = read_json(root / "evaluation.json")
 assert report["status"] == "completed"
-identifiers = report["settings"]["case_ids"]
+assert report["settings"]["dataset"] == dataset
+assert report["settings"]["packet_sha256"] == sha(packet / "SHA256SUMS.json")
+records = cases(packet, None if dataset == "synthetic" else real_data, dataset)
+assert len(records) == {"synthetic": 64, "development": 13, "reserved": 11}[dataset]
+assert report["settings"]["case_ids"] == [identifier for identifier, *_ in records]
+validator = Draft202012Validator(read_json(packet / "schema.json"), format_checker=FormatChecker())
 for variant in ("base", "adapted"):
     groups = {}
-    for identifier in identifiers:
-        case = json.loads((root / variant / f"{identifier}.json").read_text())
-        assert case["id"] == identifier
-        groups.setdefault(case["group"], []).append(case["score"])
-    actual = {group: summarize(scores) for group, scores in groups.items()}
-    assert actual == report["summaries"][variant], (root, variant)
-print(root.name, len(identifiers), "cases and summaries verified")
+    for identifier, group, _, target in records:
+        saved = validate_saved_case(root / variant / f"{identifier}.json", identifier, group, target, validator)
+        groups.setdefault(group, []).append(saved["score"])
+    assert {group: summarize(scores) for group, scores in groups.items()} == report["summaries"][variant]
+print(root.name, len(records), "cases and summaries verified")
 PYTHON
   tar -C "$CA1_VM_ROOT" -czf "$CA1_VM_ROOT/ca1-eval-v3-$set_name.tar.gz" \
     "ca1-eval-v3-$set_name"
@@ -457,7 +466,7 @@ PYTHON
 done
 ```
 
-Verify 64, 13, and 11 printed cases respectively. **Implementation-time item:** confirm the saved case fields and `summarize` signature against the refactored code; adjust this offline check if the output contract changes. No model generation is needed to validate saved metrics. Copy archives and logs to private `data/` and verify digests after download.
+Verify 64, 13, and 11 printed cases respectively. The snippet uses the refactored saved-case fields, role selector, and `summarize` contract; it verifies each saved case and recomputes the aggregate without loading model weights. Its cloud execution remains pending. Copy archives and logs to private `data/` and verify digests after download.
 
 ### C4. Compare with the recorded baseline
 
@@ -475,4 +484,4 @@ A refactored dataset with exact model-facing parity need not produce numerically
 
 ## Final implementation-session closeout
 
-Before closing the refactor implementation session, replace locally resolvable placeholders for packet acceptance, typing, artifact names/digests, and the real-data bundle; run applicable Section A commands and review the offline summary-check snippet against its saved-output contract, using only fictitious fixtures if an executable check is needed. Review Section B/C command names and arguments using offline `--help` and source inspection; do not execute those sections, load model weights, or require VM access. Leave VM access and image details as operator-supplied values. The guide becomes fully verified only after later manual cloud training and adapter-dependent evaluation have been executed and their commands, logs, and artifacts checked. Update [known_issues.md](known_issues.md), [next_steps.md](next_steps.md), [research status](../README.md), and the result documents only with work actually completed.
+The local packet, acceptance, typing, archive digests, and role-only evaluation bundle are complete. Section A and offline CLI checks passed; the Section C3 saved-output check was reviewed against the implemented contract without model loading. VM repository access, image, and transfer details remain operator-supplied. Sections B and C become verified only after later manual cloud training and adapter-dependent evaluation, with their commands, logs, and artifacts checked. Record new results in [evaluations](evaluation/evaluations.md), update [known issues](known_issues.md) and [next steps](next_steps.md) from evidence, and keep [research status](../README.md) current.

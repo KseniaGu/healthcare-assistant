@@ -9,4 +9,4 @@ The maintained research pipeline builds a self-contained fictitious CA1 packet, 
 - [Known issues](known_issues.md) and [future work](next_steps.md).
 - [Migration specification](implementation_plan.md): stage gates and preserved invariants.
 
-Private reports, source reviews, packets, and model artifacts remain under gitignored `data/`. The previously accepted `sft-pilot-v2` packet and its run are historical evidence. The new packet is accepted only through a separate `acceptance.json` record after integrity and parity or completed changed-example review.
+Private reports, source reviews, packets, and model artifacts remain under gitignored `data/`. The previously accepted `sft-pilot-v2` packet and its run are historical evidence. The `ca1-sft-v3` packet passed model-facing parity and was accepted through a separate `acceptance.json` record. Its SHA256SUMS content digest is `20d31cda44e955c60963b3da0f61add86cd20648e1041b69653d798a28af255f`; cloud training and evaluation remain pending.
