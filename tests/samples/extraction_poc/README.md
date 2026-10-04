@@ -15,11 +15,10 @@ result fields should match. Warning wording may vary, but the omission warning m
 identify missing names and incomplete references without inventing causes. Schema
 validity alone is insufficient.
 
-See [prompt evaluation](../../../research/extraction/evaluations.md) for the v3/v4 development
-history, the remaining synthetic-warning limitation, real-report results, runner
-commands and quota rules. The original nine-attempt development budget is exhausted;
+See [prompt evaluation](../../../research/extraction/evaluation/historical_evaluations.md) for the v3/v4 development
+history, the remaining synthetic-warning limitation, real-report results, and evidence. The original nine-attempt development budget is exhausted;
 do not create a fresh ledger to repeat it. Real-report evaluation later proceeded
 under separate authorization after review decisions were resolved.
 
-For the next research stage, see the
-[small-model training plan](../../../research/extraction/plan.md).
+For the maintained CA1 procedure, see the
+[reproduction guide](../../../research/extraction/reproduction.md).

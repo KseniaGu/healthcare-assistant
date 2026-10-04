@@ -1,41 +1,17 @@
 # Laboratory extraction research
 
-**Status — 2026-10-02:** The accepted CA1 v2 packet had one completed run with the
-research-only QLoRA pipeline. `checkpoint-80` is the selected adapter. Matched
-base/adapter evaluations are complete on synthetic validation, 13 real
-development reports, and 11 reserved reports. The adapter improved exact
-record matching over the base but remains unreliable on real reports:
-131/292 exact development records and 58/147 exact reserved records, with no
-fully correct reserved report. It is not ready for unattended clinical
-extraction. The production Gemini path remains unchanged. See the
-[Lightning training guide](extraction/training.md) for the verified single
-private input archive and Studio commands, and [evaluation results](extraction/evaluations.md)
-for evidence and limits. The combined archive was assembled after the completed
-runs; their original inputs remain recorded separately.
-
-## Research map
+**Status — 2026-10-04:** The accepted CA1 v2 packet produced one completed L4 QLoRA run and three matched base/adapter evaluations. The selected historical adapter is `checkpoint-80`. Its adapted exact-record results were 1,219/1,251 synthetic, 131/292 real development, and 58/147 real reserved; the matched base scores were 1,034/1,251, 94/292, and 45/147. These results remain historical evidence, and the adapter is not deployed to the application. The current refactor is preparing a self-contained packet and maintained training/evaluation commands. No new cloud training or model-dependent evaluation has run.
 
 | Need | Document |
 | --- | --- |
-| Dataset design, source roles, and acceptance checks | [Dataset plan](extraction/plan.md) |
-| Accepted packet and loader contract | [Extraction tool guide](extraction/README.md#training-pipeline-handoff) |
-| Lightning workflow and other compute options | [Training guide](extraction/training.md) |
-| Completed comparisons and selected checkpoint | [Evaluations](extraction/evaluations.md) |
-| Correction behavior and prompt/schema links | [CA1 policy](extraction/correction_policy.md) |
-| Dataset preparation and annotation workflow | [Preparation guide](extraction/preparation.md) |
-| Private report locations and per-report evidence | [Report inventory](../data/research/report_inventory.md) |
-| Local masking workflow | [Image redaction guide](image_redaction/README.md) |
+| Operational local checks and later manual cloud steps | [Reproduction](extraction/reproduction.md) |
+| Dataset roles, CA1 rules, v1 audit | [Dataset](extraction/datasets/dataset.md) |
+| L4 recipe and dependency boundary | [Training](extraction/training/training.md) |
+| New-run methodology and later results | [Evaluations](extraction/evaluation/evaluations.md) |
+| Completed v2 run, older comparisons, artifact provenance | [Historical evaluations](extraction/evaluation/historical_evaluations.md) |
+| Current findings and limitations | [Known issues](extraction/known_issues.md) |
+| Future research | [Next steps](extraction/next_steps.md) |
+| Private report locations | [Report inventory](../data/research/report_inventory.md) |
+| Local masking | [Image redaction](image_redaction/README.md) |
 
-## Data and next step
-
-The research set has 24 usable real-report targets: 13 development and 11
-reserved. D0018 needs a longer evaluation context; D0001 and D0013 are
-excluded, and D0010 is a layout guide. The accepted fictitious v2 packet has
-320 training and 64 validation reports. Frozen packet files and detailed
-medical inputs, outputs, and reviews remain under gitignored `data/`.
-
-The next step is to examine development errors against their source layouts
-and define acceptance criteria for any later experiment. Development layouts
-informed packet preparation, so those reports are diagnostic. Preserve this
-reserved evaluation as the historical test; a revised model or prompt needs
-new held-out reports for a fresh final assessment.
+Private reports, packet reviews, hashes, and model artifacts remain under gitignored `data/`. D0001/D0013 are excluded, D0010 is layout-only, and the reserved set was already evaluated. Any new final performance claim needs new held-out reports. The production Gemini v4 path remains unchanged.

@@ -1,25 +1,338 @@
-"""Generate the second CA1 pilot from fictitious, full-document parser layouts."""
+"""Deterministic fictitious CA1 scenarios, visible targets, and layout rendering."""
 
-import argparse
+import difflib
 import json
 import random
 import re
 from collections import Counter
-from pathlib import Path
+from datetime import date, timedelta
+from statistics import median
+from typing import Any
 
-from research.extraction import generate_sft_pilot as prior
-from research.extraction.evaluate_image_extraction import strict_validate
-from research.extraction.prepare_sft import MODEL, REVISION
+from research.extraction.datasets.packet import sha, validate_target
 
-OUTPUT = prior.BASE / "sft-pilot-v2"
+Assay = tuple[str, str | None, str]
+
+ELIGIBLE = frozenset("A1 A2 A3 A4 C1 D0002 D0006 D0007 D0011 D0012 D0014 D0015 D0016".split())
+
+
+BUCKETS = {"train": {"ordinary": 192, "layout": 80, "difficult": 48},
+           "validation": {"ordinary": 38, "layout": 16, "difficult": 10}}
+
+
+DOMAINS = ("chemistry", "hematology", "urine", "qualitative")
+
+
+PANELS: dict[str, list[Assay]] = {
+    "chemistry": [
+        ("Глюкоза", "ммоль/л", "3,1–6,2"), ("Креатинин", "мкмоль/л", "45–101"),
+        ("Альбумин", "г/л", "33–52"), ("Фосфор", "ммоль/л", "0,6–1,8"),
+        ("Мочевина", "ммоль/л", "2,1–8,3"), ("Билирубин общий", "мкмоль/л", "<22"),
+        ("Кальций", "ммоль/л", "2,0–2,7"), ("Общий белок", "г/л", "58–83"),
+        ("Железо", "мкмоль/л", "8–32"), ("Триглицериды", "ммоль/л", "<2,0"),
+        ("АЛТ", "Ед/л", "<45"), ("АСТ", "Ед/л", "<41"),
+        ("Холестерин общий", "ммоль/л", "<5,0"), ("Магний", "ммоль/л", "0,6–1,1"),
+        ("Натрий", "ммоль/л", "135–148"), ("Калий", "ммоль/л", "3,5–5,4")],
+    "hematology": [
+        ("Гемоглобин", "г/л", "109–169"), ("Лейкоциты", "10^9/л", "3,1–11,2"),
+        ("Эритроциты", "10^12/л", "3,5–5,9"), ("Гематокрит", "%", "33–53"),
+        ("Тромбоциты", "10^9/л", "125–410"), ("MCV", "фл", "78–102"),
+        ("MCH", "пг", "24–36"), ("Нейтрофилы, %", "%", "39–76"),
+        ("Лимфоциты, %", "%", "17–49"), ("СОЭ", "мм/час", "1–24"),
+        ("Базофилы, %", "%", "0–2"), ("Эозинофилы, %", "%", "0–6"),
+        ("Моноциты, %", "%", "2–13"), ("RDW", "%", "11–16"),
+        ("MPV", "фл", "7–12"), ("Ретикулоциты, %", "%", "0,2–2,0")],
+    "urine": [
+        ("pH мочи", None, "4,5–8,0"), ("Удельный вес", None, "1,005–1,030"),
+        ("Белок мочи", "г/л", "<0,15"), ("Глюкоза мочи", "ммоль/л", "отрицательно"),
+        ("Эритроциты в поле зрения", "#", "0–3"), ("Лейкоциты в поле зрения", "#", "0–5"),
+        ("Кетоны", None, "отрицательно"), ("Нитриты", None, "отрицательно"),
+        ("Эпителий плоский", "#", "0–6"), ("Билирубин мочи", None, "отрицательно"),
+        ("Уробилиноген", "мкмоль/л", "0–17"), ("Бактерии в поле зрения", "#", "0–1"),
+        ("Цилиндры гиалиновые", "#", "0–2"), ("Кристаллы", "#", "0–3"),
+        ("Дрожжевые клетки", "#", "0–1"), ("Клетки переходного эпителия", "#", "0–3")],
+    "qualitative": [
+        ("Антиген А", None, "отрицательно"), ("Антитела к маркеру B", None, "отрицательно"),
+        ("ПЦР маркер C", None, "не обнаружено"), ("IgM маркер D", None, "отрицательно"),
+        ("IgG маркер E", "Ед/мл", "<12"), ("Индекс маркера F", None, "<1,0"),
+        ("Антиген G", None, "отрицательно"), ("ПЦР маркер H", None, "не обнаружено"),
+        ("Реакция I", None, "отрицательно"), ("Антитела J", None, "отрицательно"),
+        ("Антитела K", None, "отрицательно"), ("Антиген L (AgL)", None, "отрицательно"),
+        ("ПЦР маркер M (M1)", None, "не обнаружено"), ("IgM маркер N", None, "отрицательно"),
+        ("IgG маркер O", "Ед/мл", "<15"), ("Индекс маркера P", None, "<1,2")],
+}
+
+
+SOURCE_HINTS = {
+    "chemistry": ("A1", "A2", "C1", "D0014"),
+    "hematology": ("A3", "D0007", "D0011", "D0016"),
+    "urine": ("A4", "D0012", "D0014", "D0016"),
+    "qualitative": ("D0002", "D0006", "D0015", "C1"),
+}
+
+
+def family_catalog():
+    """Fix source groups, layouts and splits before drawing any variants."""
+    families: list[dict[str, Any]] = []
+    for domain in DOMAINS:
+        for style in range(6):
+            index = len(families)
+            families.append(dict(family=f"t-{domain}-{style+1:02d}", split="train",
+                                 domain=domain, style=style, count=13 if index < 16 else 12,
+                                 development_sources=[SOURCE_HINTS[domain][style % 4]]))
+    for domain in DOMAINS:
+        for style in range(2):
+            families.append(dict(family=f"v-{domain}-{style+1:02d}", split="validation",
+                                 domain=domain, style=6 + DOMAINS.index(domain) * 2 + style,
+                                 count=7, development_sources=[]))
+    return families
+
+
+def smoke_bucket(item):
+    tags = set(item["tags"])
+    if tags & {"missing-name", "missing-value", "missing-date", "ambiguous-unit-abstention"}:
+        return "difficult"
+    if tags & {"paired-columns", "attached-panel", "long-panel", "wrapped-name", "history-exclusion"}:
+        return "layout"
+    return "ordinary"
+
+
+def assignments(specs, catalog):
+    """Meet the three exact bucket counts after accounting for frozen smoke IDs."""
+    remaining = {split: Counter(quotas) for split, quotas in BUCKETS.items()}
+    for item in specs:
+        remaining[item["split"]][smoke_bucket(item)] -= 1
+    slots = [(f, n) for f in catalog for n in range(f["count"])]
+    rng = random.Random(20260928)
+    rng.shuffle(slots)
+    output = {}
+    for split in BUCKETS:
+        own = [(f, n) for f, n in slots if f["split"] == split]
+        bucket_list = [b for b in ("ordinary", "layout", "difficult") for _ in range(remaining[split][b])]
+        assert len(own) == len(bucket_list) and all(v >= 0 for v in remaining[split].values())
+        rng.shuffle(bucket_list)
+        clean_needed = 48 if split == "train" else 12
+        clean_assigned = 0
+        for (f, n), bucket in zip(own, bucket_list, strict=True):
+            clean = bucket == "ordinary" and clean_assigned < clean_needed
+            clean_assigned += clean
+            output[f["family"], n] = bucket, clean
+        assert clean_assigned == clean_needed
+    return output
+
+
+def base_value_for(domain, name, reference, rng, index):
+    """Draw a fictional measurement near its own reference scale."""
+    if name in ("Кетоны", "Нитриты", "Билирубин мочи") or (domain == "qualitative" and not re.search(r"\d", reference)):
+        return ("Отрицательный", "Положительный", "не обнаружено", "+", "−")[index % 5]
+    if name == "Удельный вес":
+        return f"1,{rng.randrange(6, 31):03d}"
+    if name in ("Эритроциты в поле зрения", "Лейкоциты в поле зрения", "Эпителий плоский",
+                "Бактерии в поле зрения", "Цилиндры гиалиновые", "Кристаллы",
+                "Дрожжевые клетки", "Клетки переходного эпителия"):
+        n = rng.randrange(0, 9)
+        return f"{n}–{n+2}" if index % 4 == 0 else str(n)
+    numbers = [float(x.replace(",", ".")) for x in re.findall(r"\d+(?:[.,]\d+)?", reference)]
+    if not numbers:
+        return ("Отрицательный", "Положительный", "не обнаружено", "+", "−")[index % 5]
+    low, high = (numbers[0], numbers[-1]) if len(numbers) > 1 else (numbers[0] * 0.15, numbers[0] * 1.3)
+    if name == "pH мочи":
+        return f"{rng.uniform(4.8, 7.8):.1f}".replace(".", ",")
+    scale = max((high - low) / 5, 0.05)
+    measured = min(high + scale, max(low / 2, rng.uniform(low - scale, high + scale)))
+    if index % 11 == 0 and reference.startswith("<"):
+        places = len(reference.split(",", 1)[1]) if "," in reference else 0
+        limit = f"{numbers[0] / 2:.{places}f}"
+        return "<" + (limit.replace(".", ",") if places else limit)
+    decimals = 0 if high >= 50 and "," not in reference else 2 if index % 3 == 0 else 1
+    rendered = f"{measured:.{decimals}f}"
+    return rendered.replace(".", ",") if index % 2 else rendered
+
+
+REPAIRS = {"Глюкoза": "Глюкоза", "Отрищательный": "Отрицательный",
+           "г/π": "г/л", "φπ": "фл"}
+
+
+def visible_value(field, raw):
+    """Interpret only a rendered cell; hidden source-record fields are unavailable."""
+    if raw is None or raw.strip() in ("", "—", "–", "-"):
+        return None
+    raw = raw.strip()
+    if field == "unit" and raw == "10°/π":
+        return None
+    if field == "value" and raw.endswith(" *"):
+        raw = raw[:-2]
+    for before, after in REPAIRS.items():
+        raw = raw.replace(before, after)
+    return raw
+
+
+def date_lines(variant, bucket):
+    day = date(2023, 1, 1) + timedelta(days=variant * 17 + 80)
+    def fmt(d):
+        return d.strftime("%d.%m.%Y")
+    lines = [f"Дата печати: {fmt(day + timedelta(days=3))}"]
+    if bucket == "difficult" and variant % 7 == 0:
+        return lines, None, "print-only-date"
+    lines.append(f"Дата направления: {fmt(day)}")
+    if variant % 3 != 0:
+        lines.append(f"Дата выполнения: {fmt(day + timedelta(days=1))}")
+    if variant % 2 == 0:
+        lines.append(f"Дата взятия образца: {fmt(day - timedelta(days=1))}")
+    return lines, None, "date-precedence"
+
+
+def select_date(lines):
+    for label in ("Дата взятия образца", "Дата выполнения", "Дата направления"):
+        for line in lines:
+            if line.startswith(label + ": "):
+                return date.fromisoformat("-".join(reversed(line.split(": ", 1)[1].split(".")))).isoformat()
+    return None
+
+
+def target_from_visible(text, rows, spans, dates):
+    result, evidence, unnamed, incomplete_unnamed, missing = [], [], [], 0, []
+    for row, cell_spans in zip(rows, spans, strict=True):
+        if row["state"] != "current":
+            continue
+        cells = {field: visible_value(field, row[field]) for field in
+                 ("name", "value", "unit", "reference_range")}
+        if cells["name"] is None:
+            unnamed.append(row["value"])
+            incomplete_unnamed += visible_value("reference_range", row["reference_range"]) is None
+            evidence.append(dict(kind="omission", reason="Visible name absent", spans=cell_spans))
+            continue
+        if cells["value"] is None:
+            missing.append(cells["name"])
+        result.append(cells)
+        for field, before in row.items():
+            if field == "state" or cells[field] == before:
+                continue
+            rule = 2 if field == "name" else 3 if field == "unit" else 4 if field == "value" else 5
+            reason = ("Visible cell is absent or ambiguous" if cells[field] is None else
+                      "Identifiable mixed-script name glyph" if field == "name" else
+                      "Surviving unit glyphs identify the unit" if field == "unit" else
+                      "Separately printed abnormality flag" if before.endswith(" *") else
+                      "Identifiable qualitative spelling with polarity preserved")
+            evidence.append(dict(kind="repair" if cells[field] is not None else "abstention",
+                                 result_index=len(result) - 1, field=field, before=before,
+                                 after=cells[field], rule=rule, reason=reason,
+                                 span=cell_spans[field]))
+    warnings = []
+    if unnamed:
+        quote = ", ".join(f"'{value}'" for value in unnamed[:3])
+        detail = f" {incomplete_unnamed} reference cell(s) incomplete." if incomplete_unnamed else ""
+        warnings.append(f"Omitted {len(unnamed)} unnamed row(s); visible value(s): {quote}.{detail}")
+    if missing:
+        quote = ", ".join(f"'{name}'" for name in missing[:2])
+        warnings.append(f"Missing result value for {len(missing)} named observation(s): {quote}.")
+    chosen_date = select_date(dates)
+    if chosen_date is None:
+        warnings.append("No report collection, performance or order date is visible.")
+    target = dict(date=chosen_date, results=result, errors=warnings)
+    assert all(len(w) <= 160 for w in warnings)
+    return target, evidence
+
+
+def check_pair(text, rows, spans, target, evidence, schema):
+    """Check the target against final visible cells and source spans."""
+    validate_target(json.dumps(target, ensure_ascii=False), schema)
+    expected_count = sum(r["state"] == "current" and visible_value("name", r["name"]) is not None for r in rows)
+    if len(target["results"]) != expected_count:
+        raise ValueError("Visible observation coverage mismatch")
+    for item in evidence:
+        source_spans = item.get("spans", {}).values() if item["kind"] == "omission" else [item["span"]]
+        if any(text[s["start"]:s["end"]] != s["text"] for s in source_spans):
+            raise ValueError("Evidence span mismatch")
+    current = [r for r in rows if r["state"] == "current" and visible_value("name", r["name"]) is not None]
+    for source, result in zip(current, target["results"], strict=True):
+        for field in ("name", "value", "unit", "reference_range"):
+            before, after = source[field], result[field]
+            if after != visible_value(field, before):
+                raise ValueError("Target differs from visible-cell CA1 reading")
+            if field in ("value", "reference_range") and after is not None:
+                def numbers(s):
+                    return re.findall(r"\d+(?:[.,]\d+)*|[<>≤≥+−]", s)
+                if numbers(before.removesuffix(" *")) != numbers(after):
+                    raise ValueError("Measured number, bound or polarity changed")
+    if any(re.search(r"[А-Яа-я]", re.sub(r"'[^']*'", "", warning)) for warning in target["errors"]):
+        raise ValueError("Non-English warning text")
+
+
+def ensure_split_and_provenance(items, sources):
+    families: dict[str, str] = {}
+    groups: dict[str, str] = {}
+    ids: set[str] = set()
+    inputs: set[str] = set()
+    normalized: set[str] = set()
+    for item in items:
+        if item["id"] in ids:
+            raise ValueError("Duplicate ID")
+        ids.add(item["id"])
+        for collection, key in ((families, "family"), (groups, "source_group")):
+            old = collection.setdefault(item[key], item["split"])
+            if old != item["split"]:
+                raise ValueError("Family/source-group split leakage")
+        for source in item["development_sources"]:
+            if source not in ELIGIBLE or sources[source]["role"] != "development":
+                raise ValueError("Excluded or reserved provenance")
+        digest = item["input_sha256"]
+        compact = sha("".join(item["input"].split()))
+        if digest in inputs or compact in normalized:
+            raise ValueError("Duplicate input")
+        inputs.add(digest)
+        normalized.add(compact)
+    return families
+
+
+def near_duplicate_candidates(items):
+    """Screen representative parser layouts across splits for manual adjudication."""
+    representatives: dict[str, dict[str, Any]] = {}
+    for item in items:
+        representatives.setdefault(item["family"], item)
+    def skeleton(item):
+        lines = []
+        for line in item["input"].splitlines():
+            if line.startswith(("Дата ", "Номер бланка", "Раздел ", "ЛАБОРАТОРНЫЙ")):
+                continue
+            if line in ("Результаты:", "Исследование завершено"):
+                continue
+            line = re.sub(r"[\wА-Яа-я]+", "X", line)
+            lines.append(line)
+        return "\n".join(lines[:22])
+    train = [item for item in representatives.values() if item["split"] == "train"]
+    validation = [item for item in representatives.values() if item["split"] == "validation"]
+    candidates = []
+    for left in train:
+        for right in validation:
+            score = difflib.SequenceMatcher(None, skeleton(left), skeleton(right)).ratio()
+            if score >= 0.85:
+                candidates.append(dict(train_family=left["family"], validation_family=right["family"],
+                                       structural_similarity=round(score, 3)))
+    return sorted(candidates, key=lambda x: -x["structural_similarity"])
+
+
+def quantiles(values):
+    ordered = sorted(values)
+    return {"p50": median(ordered), "p95": ordered[(len(ordered) * 95 + 99) // 100 - 1], "max": ordered[-1]}
+
+
 SEED = 20260929
+
+
 SOURCE_LAYOUTS = (("A1", "A2", "A3", "A4"), ("C1",), ("D0002", "D0011", "D0012"),
                   ("D0006", "D0007"), ("D0014", "D0015", "D0016"), ("A3", "D0012", "D0016"))
+
+
 LABELS = {"chemistry": "Биохимическое исследование крови", "hematology": "Клиническое исследование крови",
           "urine": "Общий анализ мочи", "qualitative": "Молекулярные и серологические исследования"}
+
+
 VOCAB_SOURCES = {"chemistry": ("A3", "A4"), "hematology": ("A1", "A2", "D0007", "D0011", "D0016"),
                  "urine": ("C1", "D0012"), "qualitative": ("D0002", "D0015")}
-EXTRA = {
+
+
+EXTRA: dict[str, list[Assay]] = {
     "chemistry": [("Щелочная фосфатаза", "Ед/л", "35–128"), ("ГГТ", "Ед/л", "<55"),
                   ("С-реактивный белок", "мг/л", "<5"), ("ЛПВП", "ммоль/л", ">1,0"),
                   ("ЛПНП", "ммоль/л", "<3,0"), ("Билирубин прямой", "мкмоль/л", "<5"),
@@ -33,7 +346,9 @@ EXTRA = {
               ("Эпителий переходный", "клеток/ПЗ", "0–2"), ("Фосфаты", "клеток/ПЗ", "0–2"),
               ("Оксалаты", "клеток/ПЗ", "0–2"), ("Аскорбиновая кислота", "ммоль/л", "<0,6")],
 }
-MORE = {
+
+
+MORE: dict[str, list[Assay]] = {
     "chemistry": [("Мочевая кислота", "мкмоль/л", "140–420"), ("ЛДГ", "Ед/л", "120–245"),
                   ("Амилаза", "Ед/л", "25–125"), ("Липаза", "Ед/л", "13–60"),
                   ("Ферритин", "мкг/л", "15–220"), ("Трансферрин", "г/л", "2,0–3,6"),
@@ -48,7 +363,9 @@ MORE = {
               ("Кристаллы оксалата кальция", "клеток/ПЗ", "0–2"),
               ("Кристаллы трипельфосфатов", "клеток/ПЗ", "0–2")],
 }
-ASSAYS = (
+
+
+ASSAYS: tuple[list[Assay], ...] = (
     [("РНК вируса гриппа A, ПЦР", None, "не обнаружено"), ("РНК вируса гриппа B, ПЦР", None, "не обнаружено"),
      ("РНК SARS-CoV-2, ПЦР", None, "не обнаружено"), ("Антиген аденовируса", None, "отрицательно"),
      ("РНК респираторно-синцитиального вируса", None, "не обнаружено"), ("РНК коронавируса OC43", None, "не обнаружено"),
@@ -83,7 +400,9 @@ ASSAYS = (
      ("anti-HCV", None, "отрицательно"), ("anti-HAV IgM", None, "отрицательно"),
      ("anti-HAV IgG", "Ед/мл", "<20"), ("anti-HEV IgM", None, "отрицательно")],
 )
-VALIDATION_ASSAYS = (
+
+
+VALIDATION_ASSAYS: tuple[list[Assay], ...] = (
     [("ДНК Bordetella parapertussis", None, "не обнаружено"),
      ("ДНК Bordetella pertussis", None, "не обнаружено"),
      ("ДНК Mycoplasma pneumoniae", None, "не обнаружено"),
@@ -109,7 +428,9 @@ VALIDATION_ASSAYS = (
      ("anti-HEV IgM", None, "отрицательно"),
      ("anti-HEV IgG", None, "отрицательно")],
 )
-ASSAY_ADDITIONS = {
+
+
+ASSAY_ADDITIONS: dict[int, list[Assay]] = {
     2: [("ДНК вируса папилломы человека, тип 16", None, "не обнаружено"),
         ("ДНК вируса папилломы человека, тип 18", None, "не обнаружено"),
         ("ДНК Mycoplasma hominis", None, "не обнаружено"),
@@ -119,8 +440,10 @@ ASSAY_ADDITIONS = {
         ("Антиген Cryptosporidium spp.", None, "отрицательно"),
         ("ДНК Yersinia enterocolitica", None, "не обнаружено")],
 }
+
+
 def catalog():
-    families = prior.family_catalog()
+    families = family_catalog()
     for family in families:
         if family["split"] == "train":
             family["development_sources"] = list(dict.fromkeys(SOURCE_LAYOUTS[family["style"]] + VOCAB_SOURCES[family["domain"]]))
@@ -137,7 +460,7 @@ def panel_for(family):
         additional = ASSAY_ADDITIONS.get(group, ASSAYS[companion])
         return list(dict((name, (name, unit, ref)) for name, unit, ref in
                          ASSAYS[group] + additional).values())
-    panel = prior.PANELS[domain] + EXTRA[domain] + MORE[domain]
+    panel = PANELS[domain] + EXTRA[domain] + MORE[domain]
     # Domain-specific rotations alter panel composition without copying a result vector.
     domain_offset = 0 if domain == "chemistry" else 2 if domain == "hematology" else 5
     rotation = ((style * 4 + domain_offset) if family["split"] == "train"
@@ -156,7 +479,7 @@ def value_for(domain, name, reference, rng, index):
         return ("не обнаружена", "следы", "умеренно")[index % 3]
     if name == "Дрожжеподобные грибы":
         return ("не обнаружены", "единичные")[index % 2]
-    return prior.value_for(domain, name, reference, rng, index)
+    return base_value_for(domain, name, reference, rng, index)
 
 
 def rows_for(family, variant, rng, bucket, clean):
@@ -211,7 +534,7 @@ def rows_for(family, variant, rng, bucket, clean):
 
 
 def dates_for(family, variant, bucket):
-    lines, _, tag = prior.date_lines(variant + int(prior.sha(family["family"])[:4], 16) % 50, bucket)
+    lines, _, tag = date_lines(variant + int(sha(family["family"])[:4], 16) % 50, bucket)
     return lines, tag
 
 
@@ -219,7 +542,7 @@ def metadata(family, variant, dates):
     """Use distinct fictitious document structures, not one universal header."""
     style = family["style"]
     label = LABELS[family["domain"]]
-    order = 100000 + (int(prior.sha(family["family"])[:8], 16) + variant * 7919) % 800000
+    order = 100000 + (int(sha(family["family"])[:8], 16) + variant * 7919) % 800000
     person = (variant + style) % 5 in (0, 2)
     stamp = (variant + 2 * style) % 5 in (0, 1)
     patient = "<PERSON>" if person else "обезличено"
@@ -476,7 +799,6 @@ def render(family, variant, rows, dates):
 
 
 def profile(texts):
-    from statistics import median
     lengths = [len(text) for text in texts]
     lines = [len(text.splitlines()) for text in texts]
     first = [next((line for line in text.splitlines() if line.strip() and line.strip() != "IMAGE"), "") for text in texts]
@@ -487,196 +809,3 @@ def profile(texts):
                 with_organization=sum("<ORGANIZATION>" in text for text in texts),
                 with_website=sum("www." in text.lower() for text in texts),
                 unique_openings=len(set(first)), max_opening_count=max(Counter(first).values()))
-
-
-def build(output=OUTPUT):
-    """Write a new packet; never overwrite reviewed or historical artifacts."""
-    if output.exists():
-        raise FileExistsError(f"Packet exists: {output}")
-    prompt = (prior.CORRECTION / "prompts/corrected.txt").read_text()
-    schema = prior.load(prior.CORRECTION / "schema.json")
-    sources = {item["id"]: item for item in prior.load(prior.SMOKE / "sources.json")}
-    smoke_specs = prior.load(prior.CORRECTION / "synthetic_specs.json")
-    smoke_rows = {split: [json.loads(line) for line in
-                          (prior.CORRECTION / f"synthetic/corrected/{split}.jsonl").read_text().splitlines()]
-                  for split in prior.BUCKETS}
-    if {split: len(group) for split, group in smoke_rows.items()} != {"train": 16, "validation": 8}:
-        raise ValueError("Frozen smoke counts changed")
-    smoke_messages = {row["id"]: row["messages"] for group in smoke_rows.values() for row in group}
-    families = catalog()
-    assignments = prior.assignments(smoke_specs, families)
-    rng = random.Random(SEED)
-    items = []
-    for spec in smoke_specs:
-        messages = smoke_messages[spec["id"]]
-        if messages[0]["content"] != prompt or prior.sha(messages[1]["content"].split("<report>\n", 1)[1].split("\n</report>", 1)[0]) != spec["input_sha256"]:
-            raise ValueError("Frozen smoke message changed")
-        strict_validate(messages[2]["content"], schema)
-        items.append(dict(id=spec["id"], split=spec["split"], family=spec["family"],
-                          source_group=spec["source_group"], domain="smoke", bucket=prior.smoke_bucket(spec),
-                          clean="clean-control" in spec["tags"], smoke=True, tags=spec["tags"],
-                          transformations=spec["tags"], development_sources=spec["development_sources"],
-                          input=spec["input"], input_sha256=spec["input_sha256"],
-                          target_sha256=prior.sha(messages[2]["content"]), evidence=[],
-                          review_notes=spec["review_notes"], messages=messages,
-                          review_status="historical-smoke"))
-    for family in families:
-        for variant in range(family["count"]):
-            bucket, clean = assignments[family["family"], variant]
-            rows, transformations = rows_for(family, variant, rng, bucket, clean)
-            dates, date_tag = dates_for(family, variant, bucket)
-            text, spans = render(family, variant, rows, dates)
-            target, evidence = prior.target_from_visible(text, rows, spans, dates)
-            prior.check_pair(text, rows, spans, target, evidence, schema)
-            serialized = json.dumps(target, ensure_ascii=False, indent=2)
-            messages = [{"role": "system", "content": prompt},
-                        {"role": "user", "content": "Extract laboratory observations from this parser output:\n<report>\n" + text + "\n</report>\n"},
-                        {"role": "assistant", "content": serialized}]
-            items.append(dict(id=f"{family['family']}-{variant+1:02d}", split=family["split"],
-                              family=family["family"], source_group=family["family"],
-                              domain=family["domain"], bucket=bucket, clean=clean, smoke=False,
-                              tags=[date_tag], transformations=transformations,
-                              development_sources=family["development_sources"], input=text,
-                              input_sha256=prior.sha(text), target_sha256=prior.sha(serialized),
-                              evidence=evidence, messages=messages,
-                              review_status="pending-assistant-review"))
-    split_families = prior.ensure_split_and_provenance(items, sources)
-    if Counter(item["split"] for item in items) != {"train": 320, "validation": 64}:
-        raise ValueError("Report counts changed")
-    for split, quotas in prior.BUCKETS.items():
-        if Counter(item["bucket"] for item in items if item["split"] == split) != quotas:
-            raise ValueError("Bucket counts changed")
-    original_texts = [(prior.CORRECTION / "real" / identifier / "input.txt").read_text()
-                      for identifier in sorted(prior.ELIGIBLE)]
-    new_train = [item["input"] for item in items if item["split"] == "train" and not item["smoke"]]
-    new_validation = [item["input"] for item in items if item["split"] == "validation" and not item["smoke"]]
-    original_profile = profile(original_texts)
-    train_profile = profile(new_train)
-    validation_profile = profile(new_validation)
-    if (train_profile["characters"]["median"] < original_profile["characters"]["median"] * 0.6
-            or train_profile["lines"]["median"] < original_profile["lines"]["median"] * 0.6
-            or train_profile["max_opening_count"] > len(new_train) // 5):
-        raise ValueError("Synthetic input realism gate failed")
-    tokenizer, provenance = prior.tokenizer_and_hashes()
-    import tokenizers as tokenizers_package
-    import transformers
-    token_rows, token_counts = [], []
-    for item in items:
-        ids, labels, prefix, supervised = prior.tokenize(tokenizer, item["messages"])
-        if len(ids) > 8192:
-            raise ValueError(f"8192-token limit exceeded: {item['id']} ({len(ids)})")
-        token_rows.append(dict(id=item["id"], split=item["split"], input_ids=ids, labels=labels))
-        token_counts.append(dict(id=item["id"], split=item["split"], input=prefix,
-                                 supervised=supervised, total=len(ids)))
-    output.mkdir(parents=True)
-    for split in prior.BUCKETS:
-        (output / f"{split}.jsonl").write_text("".join(json.dumps({"id": item["id"], "messages": item["messages"]},
-                                                               ensure_ascii=False) + "\n"
-                                                    for item in items if item["split"] == split))
-    (output / "tokenized.jsonl").write_text("".join(json.dumps(row) + "\n" for row in token_rows))
-    manifest = dict(seed=SEED, status="pending-assistant-review", model=MODEL, revision=REVISION,
-                    prompt_sha256=prior.sha(prior.CORRECTION / "prompts/corrected.txt"),
-                    schema_sha256=prior.sha(prior.CORRECTION / "schema.json"),
-                    code_sha256=prior.sha(Path(__file__)),
-                    prior_code_sha256=prior.sha(Path(prior.__file__)),
-                    tokenizer_provenance=provenance,
-                    smoke_sha256={name: prior.sha(prior.CORRECTION / name) for name in
-                                  ("synthetic_specs.json", "synthetic/corrected/train.jsonl",
-                                   "synthetic/corrected/validation.jsonl")},
-                    versions=dict(transformers=transformers.__version__, tokenizers=tokenizers_package.__version__),
-                    examples=[{key: value for key, value in item.items() if key not in ("input", "messages")}
-                              for item in items])
-    prior.dump(output / "manifest.json", manifest)
-    statistics = dict(counts=dict(Counter(item["split"] for item in items)),
-                      buckets={split: dict(Counter(item["bucket"] for item in items if item["split"] == split))
-                               for split in prior.BUCKETS},
-                      domains=dict(Counter(item["domain"] for item in items)),
-                      families={split: sum(value == split for value in split_families.values())
-                                for split in prior.BUCKETS},
-                      clean={split: sum(item["clean"] for item in items if item["split"] == split)
-                             for split in prior.BUCKETS},
-                      transformations=dict(Counter(tag for item in items for tag in item["transformations"])),
-                      tokens={split: {field: prior.quantiles([row[field] for row in token_counts if row["split"] == split])
-                                      for field in ("input", "supervised", "total")}
-                              for split in prior.BUCKETS},
-                      max_total=max(row["total"] for row in token_counts),
-                      duplicate_inputs=0, split_leakage=0,
-                      near_duplicate_candidates=prior.near_duplicate_candidates(items))
-    prior.dump(output / "statistics.json", statistics)
-    prior.dump(output / "distribution.json", dict(original=original_profile,
-                                                  new_training=train_profile,
-                                                  new_validation=validation_profile,
-                                                  below_original_min_characters={"train": sum(len(text) < original_profile["characters"]["min"] for text in new_train),
-                                                                                 "validation": sum(len(text) < original_profile["characters"]["min"] for text in new_validation)},
-                                                  below_original_min_lines={"train": sum(len(text.splitlines()) < original_profile["lines"]["min"] for text in new_train),
-                                                                            "validation": sum(len(text.splitlines()) < original_profile["lines"]["min"] for text in new_validation)}))
-    prior.dump(output / "review.json", dict(status="pending-assistant-review", reviewed_validation=[],
-                                             reviewed_training=[], findings=[], unresolved=[]))
-    (output / "README.md").write_text("# CA1 synthetic SFT pilot v2\n\n"
-        "**Status: pending assistant review; do not train.** This replacement responds to the v1 distribution audit. "
-        "It keeps the corrected 16/8 smoke pairs unchanged and adds fictitious full-document parser reports. "
-        "All targets follow visible CA1 evidence. No external parser/model, training, download or GPU was used.\n\n"
-        "Build from the repository root with `/opt/venv/bin/python -m research.extraction.generate_sft_pilot_v2`. "
-        "The command refuses to overwrite an existing packet. See `distribution.json` for the original/new input comparison, "
-        "`manifest.json` for provenance and visible-cell evidence, and `statistics.json` for coverage and token counts.\n")
-    prior.dump(output / "SHA256SUMS.json", {path.name: prior.sha(path) for path in output.iterdir()
-                                              if path.is_file() and path.name != "SHA256SUMS.json"})
-    print(json.dumps(dict(statistics=statistics, distribution=prior.load(output / "distribution.json")),
-                     ensure_ascii=False, indent=2))
-
-
-def verify_packet(output=OUTPUT):
-    manifest = prior.load(output / "manifest.json")
-    checksums = prior.load(output / "SHA256SUMS.json")
-    files = {path.name for path in output.iterdir() if path.is_file() and path.name != "SHA256SUMS.json"}
-    if set(checksums) != files or any(prior.sha(output / name) != digest for name, digest in checksums.items()):
-        raise ValueError("Packet checksum mismatch")
-    if manifest["code_sha256"] != prior.sha(Path(__file__)) or manifest["prior_code_sha256"] != prior.sha(Path(prior.__file__)):
-        raise ValueError("Generator changed")
-    if manifest["prompt_sha256"] != prior.sha(prior.CORRECTION / "prompts/corrected.txt") or manifest["schema_sha256"] != prior.sha(prior.CORRECTION / "schema.json"):
-        raise ValueError("Approved prompt or schema changed")
-    if any(prior.sha(prior.CORRECTION / name) != digest for name, digest in manifest["smoke_sha256"].items()):
-        raise ValueError("Smoke source changed")
-    tokenizer, provenance = prior.tokenizer_and_hashes()
-    if provenance != manifest["tokenizer_provenance"]:
-        raise ValueError("Tokenizer provenance changed")
-    schema = prior.load(prior.CORRECTION / "schema.json")
-    examples = {item["id"]: item for item in manifest["examples"]}
-    tokens = {row["id"]: row for row in map(json.loads, (output / "tokenized.jsonl").read_text().splitlines())}
-    seen = set()
-    for split, expected in (("train", 320), ("validation", 64)):
-        rows = [json.loads(line) for line in (output / f"{split}.jsonl").read_text().splitlines()]
-        if len(rows) != expected:
-            raise ValueError("Split count mismatch")
-        for row in rows:
-            identifier, messages = row["id"], row["messages"]
-            if identifier in seen or identifier not in examples or examples[identifier]["split"] != split:
-                raise ValueError("ID or split mismatch")
-            seen.add(identifier)
-            if [message["role"] for message in messages] != ["system", "user", "assistant"]:
-                raise ValueError("Role mismatch")
-            if messages[0]["content"] != (prior.CORRECTION / "prompts/corrected.txt").read_text():
-                raise ValueError("Prompt mismatch")
-            if not messages[1]["content"].startswith("Extract laboratory observations from this parser output:\n<report>\n") or not messages[1]["content"].endswith("\n</report>\n"):
-                raise ValueError("Wrapper mismatch")
-            strict_validate(messages[2]["content"], schema)
-            if prior.sha(messages[2]["content"]) != examples[identifier]["target_sha256"]:
-                raise ValueError("Target mismatch")
-            ids, labels, _, _ = prior.tokenize(tokenizer, messages)
-            if tokens[identifier] != dict(id=identifier, split=split, input_ids=ids, labels=labels):
-                raise ValueError("Assistant label mismatch")
-    if seen != set(examples) or seen != set(tokens):
-        raise ValueError("Membership mismatch")
-    print(f"Verified {len(seen)} CA1 pairs, hashes, schema, chat boundaries and labels.")
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=OUTPUT)
-    parser.add_argument("--verify", action="store_true")
-    args = parser.parse_args()
-    verify_packet(args.output) if args.verify else build(args.output)
-
-
-if __name__ == "__main__":
-    main()

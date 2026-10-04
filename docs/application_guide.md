@@ -25,6 +25,8 @@ data. Install Docker and the VS Code Dev Containers extension first.
 
 2. Run **Dev Containers: Reopen in Container**. The post-create step installs the
    project dependencies. Initial setup requires network access.
+   The install uses tracked `pyproject.toml` and `poetry.lock`. Offline CA1
+   research tools additionally need `poetry install --with research --no-root`.
 3. Start the application from the repository root:
 
    ```sh
@@ -112,9 +114,5 @@ Experimental runners, commands and environment requirements are documented in
 explains the current findings and next steps. Local image preparation has its own
 [standalone tool](../research/image_redaction/README.md).
 
-Ollama runs on the Mac; the container endpoint is `http://host.orb.internal:11434`,
-and host clients use `http://127.0.0.1:11434`. The evaluators request their own 32K
-context and verify it independently of the desktop slider. No application defaults
-change when running these tools. Private experiment artifacts stay in `data/`;
-its container volume can mask the host directory. Existing live experiment budgets
+Earlier Ollama and host diagnostics are historical experiments; their details and exhausted budgets are recorded in [historical evaluations](../research/extraction/evaluation/historical_evaluations.md). The maintained CA1 checks are offline locally; cloud training and adapter evaluation remain manual. Private experiment artifacts stay in `data/`.
 are exhausted; consult the research protocol before any new requests.

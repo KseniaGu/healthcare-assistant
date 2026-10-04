@@ -74,15 +74,7 @@ entire processing run is not one atomic transaction.
 [PathSettings](../configs/paths.py) creates directories under `data/` for raw,
 redacted, parsed, processed, and raw LLM outputs. Existing output paths can cause
 stages to be skipped; account for cached artifacts when retesting prompts or OCR.
-The standalone `research.extraction.run_extraction_baseline` CLI always uses a
-new output directory, explicit parser inputs, local schema validation, and a shared
-nine-attempt development budget. It bypasses PDF processing and database caching.
-See [evaluation runner usage](../research/extraction/README.md).
-The separate `research.extraction.evaluate_local_extraction` CLI freezes reviewed
-targets, runs a bounded local Qwen experiment, and scores saved responses offline.
-Its A+C development split reserves B from inference and scoring. It leaves the
-application defaults and Gemini budget unchanged; see the
-[local experiment record](../research/extraction/evaluations.md).
+Earlier standalone baseline and local-model runners used separate bounded budgets and frozen targets. Their code is retained in Git history at `138c2961d3ac6771c4af06bc80b02417dcffa07b`, with results and artifact provenance in [historical evaluations](../research/extraction/evaluation/historical_evaluations.md). The maintained CA1 procedure is [reproduction](../research/extraction/reproduction.md).
 
 Reports retain complete extraction JSON, including dates and errors. Observation
 persistence uses `unit`, catalog preferences use `unit_normalized`, unnamed rows
@@ -171,5 +163,5 @@ directories; these are not side-effect-free offline checks.
 - [Application setup and usage](application_guide.md)
 - [v4 storage update, migration and historical recovery](v4_application_update.md)
 - [Research status and next steps](../research/README.md)
-- [Prompt contract and evaluation results](../research/extraction/evaluations.md)
-- [Accepted CA1 dataset and training-pipeline handoff](../research/extraction/README.md#training-pipeline-handoff)
+- [Prompt contract and evaluation results](../research/extraction/evaluation/historical_evaluations.md)
+- [Accepted CA1 dataset and training-pipeline handoff](../research/extraction/reproduction.md)

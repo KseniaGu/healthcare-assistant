@@ -226,7 +226,7 @@ with all review follow-ups resolved by user confirmation on 2026-09-27. Exact
 current PNG/JSON paths and checks are in the [private review](../../data/approved_image_redactions/originals-review-2026-09-26.md)
 and [report inventory](../../data/research/report_inventory.md). D0018-p008 has no
 results and remains grouped with D0018. The user confirmed KDL = original group B;
-both reports remain reserved from adaptation in the [SFT preparation workflow](../extraction/preparation.md). The three-page example below illustrates
+both reports remain reserved from adaptation in the [SFT preparation workflow](../extraction/datasets/dataset.md). The three-page example below illustrates
 naming only; it does not describe D0017's actual page count.
 
 A three-page PDF creates `D0017-p001`, `D0017-p002`, `D0017-p003` in WORK. These

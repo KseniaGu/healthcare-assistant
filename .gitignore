@@ -34,7 +34,6 @@ docs/*
 
 # Environment
 .env
-poetry.lock
 credentials.json
 secrets.yml
 .ruff_cache/

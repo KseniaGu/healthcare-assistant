@@ -99,7 +99,7 @@ After completing a meaningful research task or intermediate experiment step, upd
 `research/README.md` in the same change: current status, what was learned, relevant
 limitations, evidence links and the next concrete action. Distinguish completed work
 from proposals and pending approvals; replace superseded status instead of appending
-a conversation log. Update `research/extraction/evaluations.md` for new results and
+a conversation log. Update `research/extraction/evaluation/evaluations.md` for new results and
 the relevant tool guide for command or environment changes. Keep detailed medical
 inputs, outputs and review artifacts in gitignored `data/`; preserve historical
 scores, provenance and exhausted ledgers. Documentation updates do not authorize

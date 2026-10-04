@@ -1,0 +1,5 @@
+# Maintained CA1 evaluation
+
+The refactored evaluator selects one of synthetic validation (64 cases), real development (13), or real reserved (11). Real cases arrive in a separate private role-only bundle. It uses the accepted packet's prompt, schema, and tokenizer; one pinned base with the selected adapter toggled on/off; greedy unconstrained generation with EOS stopping; and exact scoring without string normalization. D0018 alone has a 16,384-token total budget; all others use 8,192. Each case is saved before advancing, and resume validates settings, adapter artifact hashes, case identity, and saved scores.
+
+No refactored adapter result exists yet. [Historical evaluations](historical_evaluations.md) preserve the completed v2 run and older baselines. The 13 development layouts informed generation; the 11 reserved reports were already evaluated. Exact record matches do not establish semantic clinical equivalence. New final claims require new held-out reports. The later [reproduction procedure](../reproduction.md) specifies matched evaluation and comparison; new scores belong here only after that manual run.

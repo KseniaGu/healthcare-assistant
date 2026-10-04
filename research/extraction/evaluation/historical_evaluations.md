@@ -1,31 +1,33 @@
-# Completed extraction evaluations
+# Historical extraction evaluations through the accepted v2 CA1 run
 
-[Research status and next steps](../README.md) · [Runner instructions](README.md)
+[Research status](../../README.md) · [Current reproduction procedure](../reproduction.md)
+
+All `data/` links below are private, gitignored historical artifacts and are absent from a clean clone.
 
 ## Matched CA1 real-report evaluations — 2026-10-01
 
 The user completed separate Lightning CUDA comparisons on all 13 real
 development reports and 11 reserved reports using the same pinned Qwen base,
 selected `checkpoint-80` adapter, NF4/BF16 precision, prompt, greedy decoding,
-and exact scorer. The [development archive](../../data/research/extraction/ca1-eval-development-v1.tar.gz)
+and exact scorer. The [development archive](../../../data/research/extraction/ca1-eval-development-v1.tar.gz)
 has SHA-256 `d0ceeb1e2e8af2ff62e8e2ba3499d005a7309f76ead89eaeadd99e66c9e8826a`;
-the [reserved archive](../../data/research/extraction/ca1-eval-reserved-v1.tar.gz)
+the [reserved archive](../../../data/research/extraction/ca1-eval-reserved-v1.tar.gz)
 has SHA-256 `fc31b47eae2d3f56d81e8a0ddfeeaba95383043028ea290a913a35a376475588`.
 The completed runs used the original separate private input archives:
-[training](../../data/research/extraction/ca1-lightning-preflight.tar.gz)
+[training](../../../data/research/extraction/ca1-lightning-preflight.tar.gz)
 SHA-256 `ef7552ffd25a576dd2f43bccc5969666d1eeac6b95efaf03023b3391d29eb5fa`,
-[development](../../data/research/extraction/ca1-development-eval-input.tar.gz)
+[development](../../../data/research/extraction/ca1-development-eval-input.tar.gz)
 SHA-256 `9308b51eaf0a3beedb55cba5f916c0fbea4b44fa7a1fdb4a6485906189ca6c7a`,
-and [reserved](../../data/research/extraction/ca1-reserved-eval-input.tar.gz)
+and [reserved](../../../data/research/extraction/ca1-reserved-eval-input.tar.gz)
 SHA-256 `e9db5134b4b013bc31bb8ec3e696db3df1069ca4811ed516b3cf78f4e09c04e5`.
-The later [single Studio input archive](../../data/research/extraction/ca1-lightning-input-v1.tar.gz)
+The later [single Studio input archive](../../../data/research/extraction/ca1-lightning-input-v1.tar.gz)
 combines the same necessary code and data for simpler setup; it was assembled
 after these evaluations and did not produce their saved outputs.
 
 Both manifests say `completed` and match the accepted packet and selected run
 record. All 48 saved responses reached EOS. Case membership, individual scores,
 and aggregate summaries were reproduced against the local targets. The
-[private per-report review](../../data/research/extraction/ca1-real-eval-review-v1.md)
+[private per-report review](../../../data/research/extraction/ca1-real-eval-review-v1.md)
 records each pair and selected source-aligned errors.
 
 | Set and measure | Base | Adapted |
@@ -80,7 +82,7 @@ training or extraction change.
 ## Matched CA1 synthetic validation generation — 2026-10-01
 
 The user ran the selected `checkpoint-80` adapter and its base model in one
-Lightning CUDA evaluation. The downloaded [archive](../../data/research/extraction/ca1-eval-full.tar.gz)
+Lightning CUDA evaluation. The downloaded [archive](../../../data/research/extraction/ca1-eval-full.tar.gz)
 has SHA-256 `f82de82d12bd36fbc41c070eeb3e00d4c86b13f5f00806f64fdedccdbf594b77`.
 Its manifest identifies the pinned Qwen revision and accepted v2 packet, and
 its run-record hash matches the locally verified selected adapter. It records
@@ -150,7 +152,7 @@ and Qwen revision `cdbee75f17c01a7cc42f958dc650907174af0554`. Its
 trainer-code SHA-256 matches the current `train_ca1.py`. All 120 optimizer
 steps completed in 4,990 seconds; peak allocated VRAM was 14.18 GiB. W&B
 [recorded the run](https://wandb.ai/gu-fuku-ro-/ca1-pilot-v2/0aw4uf5v).
-The selected-adapter [archive](../../data/research/extraction/ca1-best-adapter.tar.gz)
+The selected-adapter [archive](../../../data/research/extraction/ca1-best-adapter.tar.gz)
 was copied and verified locally (SHA-256
 `e880cf8637d8df52f80a0073f0922ea176fd4d4fa5db56bef85ad621893f2344`).
 It contains exactly the completed `run.json`, `checkpoint-80` adapter config,
@@ -177,7 +179,7 @@ are reported above.
 
 Final results for **all 13 real development reports and eight synthetic validation
 examples**, evaluated with the approved CA1 prompt. Each example appears once.
-[Reviewed metrics and field differences](../../data/research/extraction/qwen-ca1-d0012-retry-v1/combined_assessment.json)
+[Reviewed metrics and field differences](../../../data/research/extraction/qwen-ca1-d0012-retry-v1/combined_assessment.json)
 provide the evidence behind the tables; individual outputs are linked below.
 
 Qwen3-4B-Instruct-2507 Q8_0 on Ollama 0.34.3; unconstrained decoding with local
@@ -206,32 +208,32 @@ A3/D0015 receive zero scoring credit, but are **not 54 observed omissions**.
 
 | Report / raw output | Schema valid | Exact records / target rows | Complete report |
 | --- | --- | ---: | --- |
-| [A1](../../data/research/extraction/qwen-ca1-untuned-v1/A1/content.txt) | Yes | 17/20 | Fail |
-| [A2](../../data/research/extraction/qwen-ca1-untuned-v1/A2/content.txt) | Yes | 29/32 | Fail |
-| [A3](../../data/research/extraction/qwen-ca1-untuned-v1/A3/content.txt) | No | 0/45 | Fail |
-| [A4](../../data/research/extraction/qwen-ca1-untuned-v1/A4/content.txt) | Yes | 0/2 | Fail |
-| [C1](../../data/research/extraction/qwen-ca1-untuned-v1/C1/content.txt) | Yes | 15/24 | Fail |
-| [D0002](../../data/research/extraction/qwen-ca1-untuned-v1/D0002/content.txt) | Yes | 8/12 | Fail |
-| [D0006](../../data/research/extraction/qwen-ca1-untuned-v1/D0006/content.txt) | Yes | 0/18 | Fail |
-| [D0007](../../data/research/extraction/qwen-ca1-untuned-v1/D0007/content.txt) | Yes | 9/22 | Fail |
-| [D0011](../../data/research/extraction/qwen-ca1-untuned-v1/D0011/content.txt) | Yes | 7/26 | Fail |
-| [D0012](../../data/research/extraction/qwen-ca1-d0012-retry-v1/D0012/content.txt) | Yes | 6/40 | Fail |
-| [D0014](../../data/research/extraction/qwen-ca1-untuned-v1/D0014/content.txt) | Yes | 0/20 | Fail |
-| [D0015](../../data/research/extraction/qwen-ca1-untuned-v1/D0015/content.txt) | No | 0/9 | Fail |
-| [D0016](../../data/research/extraction/qwen-ca1-untuned-v1/D0016/content.txt) | Yes | 0/22 | Fail |
+| [A1](../../../data/research/extraction/qwen-ca1-untuned-v1/A1/content.txt) | Yes | 17/20 | Fail |
+| [A2](../../../data/research/extraction/qwen-ca1-untuned-v1/A2/content.txt) | Yes | 29/32 | Fail |
+| [A3](../../../data/research/extraction/qwen-ca1-untuned-v1/A3/content.txt) | No | 0/45 | Fail |
+| [A4](../../../data/research/extraction/qwen-ca1-untuned-v1/A4/content.txt) | Yes | 0/2 | Fail |
+| [C1](../../../data/research/extraction/qwen-ca1-untuned-v1/C1/content.txt) | Yes | 15/24 | Fail |
+| [D0002](../../../data/research/extraction/qwen-ca1-untuned-v1/D0002/content.txt) | Yes | 8/12 | Fail |
+| [D0006](../../../data/research/extraction/qwen-ca1-untuned-v1/D0006/content.txt) | Yes | 0/18 | Fail |
+| [D0007](../../../data/research/extraction/qwen-ca1-untuned-v1/D0007/content.txt) | Yes | 9/22 | Fail |
+| [D0011](../../../data/research/extraction/qwen-ca1-untuned-v1/D0011/content.txt) | Yes | 7/26 | Fail |
+| [D0012](../../../data/research/extraction/qwen-ca1-d0012-retry-v1/D0012/content.txt) | Yes | 6/40 | Fail |
+| [D0014](../../../data/research/extraction/qwen-ca1-untuned-v1/D0014/content.txt) | Yes | 0/20 | Fail |
+| [D0015](../../../data/research/extraction/qwen-ca1-untuned-v1/D0015/content.txt) | No | 0/9 | Fail |
+| [D0016](../../../data/research/extraction/qwen-ca1-untuned-v1/D0016/content.txt) | Yes | 0/22 | Fail |
 
 ### Synthetic validation examples
 
 | Example / raw output | Schema valid | Exact records / target rows | Complete report |
 | --- | --- | ---: | --- |
-| [v01-transposed-01](../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-01/content.txt) | Yes | 2/3 | Fail |
-| [v01-transposed-02](../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-02/content.txt) | Yes | 3/3 | Pass |
-| [v01-transposed-03](../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-03/content.txt) | Yes | 1/2 | Fail |
-| [v01-transposed-04](../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-04/content.txt) | Yes | 3/3 | Pass |
-| [v02-numbered-blocks-01](../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-01/content.txt) | Yes | 1/2 | Fail |
-| [v02-numbered-blocks-02](../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-02/content.txt) | Yes | 2/2 | Fail |
-| [v02-numbered-blocks-03](../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-03/content.txt) | Yes | 0/2 | Fail |
-| [v02-numbered-blocks-04](../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-04/content.txt) | Yes | 2/3 | Fail |
+| [v01-transposed-01](../../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-01/content.txt) | Yes | 2/3 | Fail |
+| [v01-transposed-02](../../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-02/content.txt) | Yes | 3/3 | Pass |
+| [v01-transposed-03](../../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-03/content.txt) | Yes | 1/2 | Fail |
+| [v01-transposed-04](../../../data/research/extraction/qwen-ca1-untuned-v1/v01-transposed-04/content.txt) | Yes | 3/3 | Pass |
+| [v02-numbered-blocks-01](../../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-01/content.txt) | Yes | 1/2 | Fail |
+| [v02-numbered-blocks-02](../../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-02/content.txt) | Yes | 2/2 | Fail |
+| [v02-numbered-blocks-03](../../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-03/content.txt) | Yes | 0/2 | Fail |
+| [v02-numbered-blocks-04](../../../data/research/extraction/qwen-ca1-untuned-v1/v02-numbered-blocks-04/content.txt) | Yes | 2/3 | Fail |
 
 ### Main findings and limitations
 
@@ -258,7 +260,7 @@ context and decoding conditions; tuned BF16 versus this Q8 baseline is insuffici
 
 ## Correction-aware preparation — 2026-09-27
 
-[CA1 preparation](correction_policy.md) adds 24 paired real targets and 16/8 matched
+[CA1 preparation](../datasets/dataset.md) adds 24 paired real targets and 16/8 matched
 synthetic pairs for a future comparison. There are 250 proposed field changes and
 20 optional-field abstentions; numeric measurements are unchanged. This is annotation
 work, not a new evaluation result. No model predictions, score changes, training or
@@ -266,7 +268,7 @@ API calls occurred. Historical results below remain unchanged.
 
 ## SFT data preparation — 2026-09-27
 
-The [review packet](../../data/research/extraction/sft-smoke-v1/README.md) contains
+The [review packet](../../../data/research/extraction/sft-smoke-v1/README.md) contains
 16 synthetic training and 8 validation pairs, plus 24 usable real targets with 439
 observations. All 22 parser submissions and 14 teacher calls succeeded; unchanged
 drafts and source-bound corrections are retained. D0001/D0013 are explicitly
@@ -275,12 +277,12 @@ for longer-context evaluation. The maximum synthetic conversation is 4,092 token
 36 offline tests pass; 658 historical/source hashes remain unchanged. This is data
 preparation, not a new model score or evidence of SFT improvement. At that
 date the original preparation packet awaited acceptance. The later
-[v2 synthetic packet](../../data/research/extraction/sft-pilot-v2/README.md)
+[v2 synthetic packet](../../../data/research/extraction/sft-pilot-v2/README.md)
 was accepted on 2026-09-29. All historical evaluations below are unchanged.
 
 ## Contract and scoring
 
-The executable contract is [v4.yaml](../../backend/prompts/laboratory_test_processor/v4.yaml),
+The executable contract is [v4.yaml](../../../backend/prompts/laboratory_test_processor/v4.yaml),
 evaluated revision v4.1, SHA-256
 `5016ee3952d7198a79b5cb50c41da8132d14cd7ca368f6487fb7f7df13b2818b`.
 It requires `date`, `results` and `errors`. Rows contain a nonblank `name` and
@@ -401,6 +403,34 @@ part of the evidence, not cleanup candidates.
 | Final image pilot | `extraction_poc/image-extraction-pilot-v1/assessment.md`, `scores.json`, `discrepancies.md` |
 
 For historical request settings, amendments and earlier intermediate states, see
-[archived evaluation notes](archive/legacy_evaluations.md) and
-[archived research notes](archive/legacy_plan.md). Current conclusions live here
-and in the [research summary](../README.md), not in those chronological notes.
+the ignored local `research/extraction/archive/legacy_evaluations.md` and
+`research/extraction/archive/legacy_plan.md` notes. Current conclusions live here
+and in the [research summary](../../README.md), not in those chronological notes.
+
+## v2 source and packet anchors for the refactor
+
+The historical implementation revision is `138c2961d3ac6771c4af06bc80b02417dcffa07b`. Its accepted `sft-pilot-v2/SHA256SUMS.json` digest is `bad1ed2e70de8886a1bb2a57e2ce9c782009e2e2c189912168dd1c570601b4e0`. Every listed old payload hash was rechecked before migration parity. A fresh old-code build reproduced the accepted train, validation, tokenized, statistics, and distribution files byte for byte; the accepted packet's later review/status metadata changed its manifest and checksum file. The old generator hashes in the accepted manifest are `47c405eabe22d0d49c6a2375ee83fa4640fed414e9bcee5635fb0a4e975fcbdd` (v2) and `12d9ee4468d0b61fa4b21ba11dbe5790ae6b58b902e0a8c8dc16c554e086479c` (v1 helper).
+
+| Historical private input | SHA-256 |
+| --- | --- |
+| Correction `SHA256SUMS.json` | `0cdbfa9219356d771d24745f7040bdfcd8c8471fa032fc2fed2ad0d96ff7dea5` |
+| Smoke `sources.json` | `95e6cade4c634e434a7ca2c9aade2c2e45751c55d8585226533d0fa42c6041a1` |
+| CA1 prompt | `01ba33c21cd86794c6b0e5d46286fb58bb52408fe8c917037cc883cc6e70ebf6` |
+| CA1 schema | `ad3482b711418cbea1c1e56d31564630d22fa20986cc902cc44c4fa4c1e0a570` |
+| Tokenizer chat template | `64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326` |
+| Corrected smoke specifications | `343d0fa75b6a02cb057cc899ef3f07dde3803cb56955c6160fb87839b235b479` |
+| Corrected smoke train/validation JSONL | `a339597b3f6bdd0a5d092e280eb8033f8d885cac2a7c1c9c132f473989ac4933` / `a2b0f7d64fc249ec12a567467ed96fbcefd50c4ba8d48db62aa7f5e14d20ff6f` |
+
+The historical generator also read these 13 eligible development `input.txt` files for its distribution profile; hashes are listed without medical text:
+
+| ID | SHA-256 | ID | SHA-256 |
+| --- | --- | --- | --- |
+| A1 | `41da54df72e9d22217fc29c642e20908fc64956f272a92a1159bfdba2bbe9660` | A2 | `765a8731a3f992c5eccebc290f7b8180b95fd4e061210e6b4d9ffdbcc85ae7d8` |
+| A3 | `fed2feaf7137658015d3a04dd330372655666d3d94c4b4d93d934e4b66fad2cf` | A4 | `d72b361cf8eb7dc1017c1a2504ba4718381a418c09e001dcbd196385eecf45ef` |
+| C1 | `8880636891cf59912dc49bc443a5a16a0587d3672b49b94bf6fc0d8c675892cb` | D0002 | `0ccbf4131a086387d9c7b51687eb895092aa4e570a694a980ef58a5866386b96` |
+| D0006 | `e60ee1ade039905ad63ce101b14fe270d0396c4943625a22cfaa5d2a3a21dcba` | D0007 | `843cfa1dd6fbb999c8f7ae9b5d0f269de57623eb5cfffa712e4812ba16ef81db` |
+| D0011 | `bc90bf4849b42d3c2ae578ddd2230d1421ea6fbfa3e7503364c6478da934f881` | D0012 | `9b3ddee92ddfac10c3a82e032017bb9a9d36f58ca3459b8807d1d83470291f87` |
+| D0014 | `29f346ffc287b91a69fac5ebcea8f861b6d13b7625a1c71c96b73b7676c49216` | D0015 | `bdbf47a9ddb6eca6b98d370614952c2654235869e1f24ed9734991e7c3e75eb9` |
+| D0016 | `f4e7bdeb6d847cf26a5525e6ccd0241ef2c1e126aafc82bc744078120471eddf` | | |
+
+The pinned tokenizer-file hashes remain in the historical accepted manifest under `tokenizer_provenance.files`. The original separate Studio input archives and their digests are recorded at the start of this document; the later unified archive did not produce the historical outputs. The old focused suite passed 107 tests before migration, while Ruff reported ten findings in subsequently removed historical modules/tests. A type checker was not configured at that baseline.

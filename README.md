@@ -16,6 +16,11 @@ setup. Create a root `.env` using `.env.example`, configure the API credentials 
 database settings, and select **Dev Containers: Reopen in Container**. Follow the
 [application guide](docs/application_guide.md) for the exact setup and prerequisites.
 
+Tracked `pyproject.toml` and `poetry.lock` define the local development environment.
+For offline CA1 dataset work, install the optional research group with
+`poetry install --with research --no-root`; the [reproduction guide](research/extraction/reproduction.md)
+covers its checks. Cloud L4 training uses separate requirements and its existing CUDA PyTorch.
+
 From the container terminal:
 
 ```sh

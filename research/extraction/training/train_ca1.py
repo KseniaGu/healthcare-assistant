@@ -1,59 +1,19 @@
-"""Check and fine-tune the accepted CA1 v2 packet; no production integration."""
+"""Check an accepted CA1 packet and run its pinned CUDA fine-tuning recipe."""
 
 import argparse
-import hashlib
 import importlib.metadata
 import json
 import math
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-MODEL = "Qwen/Qwen3-4B-Instruct-2507"
-REVISION = "cdbee75f17c01a7cc42f958dc650907174af0554"
-
-ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "data/research/extraction"
-PACKET = BASE / "sft-pilot-v2"
-PACKET_SHA256 = "bad1ed2e70de8886a1bb2a57e2ce9c782009e2e2c189912168dd1c570601b4e0"
-CORRECTION = BASE / "sft-correction-v1"
-TOKENIZER = BASE / "sft-smoke-v1/tokenizer"
-LIMIT = 8192
-COUNTS = {"train": 320, "validation": 64}
+from research.extraction.datasets.packet import LIMIT, MODEL, PACKET, REVISION, load_packet, read_json, sha
 
 
-def sha(path_or_text):
-    value = path_or_text.read_bytes() if isinstance(path_or_text, Path) else path_or_text.encode()
-    return hashlib.sha256(value).hexdigest()
-
-
-def read_json(path):
-    return json.loads(path.read_text())
-
-
-def read_jsonl(path):
-    return [json.loads(line) for line in path.open()]
-
-
-def validate_labels(row, eos_id, newline_ids):
-    ids, labels = row["input_ids"], row["labels"]
-    if not ids or len(ids) != len(labels) or len(ids) > LIMIT:
-        raise ValueError(f"Invalid chat length: {row['id']}")
-    supervised = [index for index, label in enumerate(labels) if label != -100]
-    if not supervised:
-        raise ValueError(f"No assistant labels: {row['id']}")
-    start, end = supervised[0], supervised[-1]
-    if (
-        start == 0
-        or supervised != list(range(start, end + 1))
-        or labels[start : end + 1] != ids[start : end + 1]
-        or labels[end] != eos_id
-        or ids[start : end + 1].count(eos_id) != 1
-        or ids[end + 1 :] != newline_ids
-    ):
-        raise ValueError(f"Assistant boundary or post-EOS mask changed: {row['id']}")
-    return start
-
+def current_source_commit():
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 
 def collate_batch(rows, pad_id):
     """Right-pad cached conversations while ignoring every padded target token."""
@@ -71,95 +31,6 @@ def collate_batch(rows, pad_id):
             [[1] * len(row["input_ids"]) + [0] * (width - len(row["input_ids"])) for row in rows], dtype=torch.long
         ),
     }
-
-
-def load_packet(packet=PACKET, correction=CORRECTION, tokenizer_path=TOKENIZER):
-    """Load only the sealed, reviewed split and its precomputed assistant labels."""
-    from jsonschema import Draft202012Validator, FormatChecker
-    from transformers import AutoTokenizer
-
-    if sha(packet / "SHA256SUMS.json") != PACKET_SHA256:
-        raise ValueError("This is not the user-accepted sealed v2 packet")
-    manifest = read_json(packet / "manifest.json")
-    review = read_json(packet / "review.json")
-    if (manifest.get("status"), review.get("status")) != ("user-accepted", "user-accepted"):
-        raise ValueError("The packet is not the accepted v2 packet")
-    if (manifest["model"], manifest["revision"]) != (MODEL, REVISION):
-        raise ValueError("Model revision changed")
-    checksums = read_json(packet / "SHA256SUMS.json")
-    actual_files = {path.name for path in packet.iterdir() if path.is_file() and path.name != "SHA256SUMS.json"}
-    if set(checksums) != actual_files or any(sha(packet / name) != digest for name, digest in checksums.items()):
-        raise ValueError("Sealed packet checksum mismatch")
-    prompt_path, schema_path = correction / "prompts/corrected.txt", correction / "schema.json"
-    if sha(prompt_path) != manifest["prompt_sha256"] or sha(schema_path) != manifest["schema_sha256"]:
-        raise ValueError("CA1 prompt or schema changed")
-    for source, field in (
-        (ROOT / "research/extraction/generate_sft_pilot_v2.py", "code_sha256"),
-        (ROOT / "research/extraction/generate_sft_pilot.py", "prior_code_sha256"),
-    ):
-        if sha(source) != manifest[field]:
-            raise ValueError(f"Packet generator changed: {source.name}")
-    provenance = manifest["tokenizer_provenance"]
-    if (provenance["model"], provenance["revision"]) != (MODEL, REVISION):
-        raise ValueError("Tokenizer revision changed")
-    if any(sha(tokenizer_path / name) != digest for name, digest in provenance["files"].items()):
-        raise ValueError("Tokenizer files changed")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
-    if sha(tokenizer.chat_template) != provenance["chat_template_sha256"]:
-        raise ValueError("Chat template changed")
-    if tokenizer.pad_token_id is None or tokenizer.eos_token_id is None:
-        raise ValueError("Pinned tokenizer lacks pad or EOS token")
-    newline_ids = tokenizer.encode("\n", add_special_tokens=False)
-    schema = read_json(schema_path)
-    validator = Draft202012Validator(schema, format_checker=FormatChecker())
-    examples = {item["id"]: item for item in manifest["examples"]}
-    if len(examples) != len(manifest["examples"]) or len(examples) != sum(COUNTS.values()):
-        raise ValueError("Manifest membership changed")
-    prompt = prompt_path.read_text()
-    token_rows = read_jsonl(packet / "tokenized.jsonl")
-    tokens = {row["id"]: row for row in token_rows}
-    if len(tokens) != len(token_rows):
-        raise ValueError("Duplicate token IDs")
-    splits, families = {}, {}
-    seen = set()
-    for split, count in COUNTS.items():
-        messages = read_jsonl(packet / f"{split}.jsonl")
-        if len(messages) != count:
-            raise ValueError(f"Wrong {split} count")
-        splits[split] = []
-        families[split] = set()
-        for item in messages:
-            identifier = item["id"]
-            if identifier in seen or identifier not in examples or identifier not in tokens:
-                raise ValueError(f"Duplicate or unknown report ID: {identifier}")
-            seen.add(identifier)
-            example, row = examples[identifier], tokens[identifier]
-            if example["split"] != split or row["split"] != split:
-                raise ValueError(f"Split mismatch: {identifier}")
-            families[split].add(example["family"])
-            chat = item["messages"]
-            if (
-                [part["role"] for part in chat] != ["system", "user", "assistant"]
-                or chat[0]["content"] != prompt
-                or not chat[1]["content"].startswith(
-                    "Extract laboratory observations from this parser output:\n<report>\n"
-                )
-                or not chat[1]["content"].endswith("\n</report>\n")
-            ):
-                raise ValueError(f"Prompt, wrapper, or roles changed: {identifier}")
-            if sha(chat[2]["content"]) != example["target_sha256"]:
-                raise ValueError(f"Target changed: {identifier}")
-            validator.validate(json.loads(chat[2]["content"]))
-            prefix = validate_labels(row, tokenizer.eos_token_id, newline_ids)
-            prefix_ids = tokenizer.apply_chat_template(chat[:2], tokenize=True, add_generation_prompt=True)
-            if hasattr(prefix_ids, "keys"):
-                prefix_ids = prefix_ids["input_ids"]
-            if row["input_ids"][:prefix] != prefix_ids:
-                raise ValueError(f"Cached chat-template boundary changed: {identifier}")
-            splits[split].append(row)
-    if seen != set(examples) or seen != set(tokens) or families["train"] & families["validation"]:
-        raise ValueError("Split membership or family isolation changed")
-    return splits, tokenizer, manifest
 
 
 class TokenRows:
@@ -202,10 +73,15 @@ def cuda_dtype():
     if not torch.cuda.is_available():
         raise RuntimeError("Training requires one CUDA GPU; this container has none")
     capability = torch.cuda.get_device_capability()
-    cuda = tuple(int(part) for part in torch.version.cuda.split("."))
+    cuda_version = torch.version.cuda
+    if cuda_version is None:
+        raise RuntimeError("CUDA runtime version is unavailable")
+    cuda = tuple(int(part) for part in cuda_version.split("."))
     if capability[0] == 6 and cuda >= (12, 8):
         raise RuntimeError("P100/sm60 needs a bitsandbytes CUDA 11.8–12.6 wheel")
-    return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    if not torch.cuda.is_bf16_supported():
+        raise RuntimeError("The matched CA1 recipe requires CUDA BF16")
+    return torch.bfloat16
 
 
 def preflight(rows, tokenizer):
@@ -246,6 +122,7 @@ def train(args, splits, tokenizer):
         "packet_sha256": sha(args.packet / "SHA256SUMS.json"),
         "seed": 42,
         "trainer_code_sha256": sha(Path(__file__)),
+        "source_commit": current_source_commit(),
         "epochs": 3,
         "microbatch": 1,
         "accumulation": 8,
@@ -264,6 +141,8 @@ def train(args, splits, tokenizer):
         "report_to": args.report_to,
         "max_tokens": LIMIT,
     }
+    if recipe["source_commit"] != read_json(args.packet / "manifest.json")["source_commit"]:
+        raise ValueError("Training source revision differs from the accepted packet")
     if args.resume:
         if not run_file.exists() or read_json(run_file)["recipe"] != recipe:
             raise ValueError("Resume requires an existing run with the identical recipe and packet")
@@ -360,13 +239,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("check", "preflight", "train"))
     parser.add_argument("--packet", type=Path, default=PACKET)
-    parser.add_argument("--correction", type=Path, default=CORRECTION)
-    parser.add_argument("--tokenizer", type=Path, default=TOKENIZER)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--report-to", choices=("none", "wandb"), default="none")
     args = parser.parse_args()
-    splits, tokenizer, _ = load_packet(args.packet, args.correction, args.tokenizer)
+    splits, tokenizer, _ = load_packet(args.packet)
     if args.stage == "check":
         print(
             f"Accepted CA1 packet: {len(splits['train'])} train, {len(splits['validation'])} validation; "
