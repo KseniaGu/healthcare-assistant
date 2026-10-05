@@ -1,6 +1,6 @@
 # Reproducing the maintained CA1 extraction experiment
 
-**Status — 2026-10-04:** Section A completed locally: `ca1-sft-v3` was generated from committed source, matched the reviewed v2 packet model-facing content, and was accepted through separate parity evidence. Its offline `train_ca1 check` passes. Sections B and C remain manual cloud procedures; no refactored model training or adapter-dependent evaluation has run. Offline CLI and packet checks do not verify future VM execution.
+**Status — 2026-10-05:** Section A completed locally. Manual L4 training and all three matched evaluations in Sections B and C then completed. Downloaded run, logs, adapter, and saved outputs were validated offline; [current evaluation](evaluation/evaluations.md) records results, case regressions, hashes, and missing archival sidecars. The exact sequence of VM transfer commands was not independently observed.
 
 This is the canonical **operational** guide. Dataset design, source roles, and the v1 audit belong in [datasets/dataset.md](datasets/dataset.md); training recipe and environment rationale belong in [training/training.md](training/training.md); new-run scores and interpretation belong in [evaluation/evaluations.md](evaluation/evaluations.md), with the recorded CA1 baseline in [historical evaluations](evaluation/historical_evaluations.md). The [implementation plan](implementation_plan.md) defines migration gates. All detailed medical data and model artifacts remain under gitignored `data/`.
 
@@ -253,7 +253,7 @@ The evaluator accepted the staged role-only bundle offline: exactly 13 developme
 
 ## B. Manual cloud training after refactoring
 
-**Do not execute any command in Section B during the refactor implementation session.** This includes transfer, VM setup, dependency installation, model download, GPU preflight, training, and checkpoint handling. Section B is for the later manual run, after the cleaned code and accepted packet are finalized. These are planned instructions for a Linux CUDA cloud VM. The completed historical experiment used a Lightning Studio L4 at `/teamspace/studios/this_studio`; the commands below use that location. A different provider requires an explicitly documented path and image adjustment, not a silent change to the recipe. A VM with SSH can use `scp`; Lightning's file upload interface can place the same archives in the VM root instead.
+Section B documents the manual Linux CUDA procedure performed after the local refactor. The downloaded v3 run record reports a completed L4 run on 2026-10-05. The commands below are reproducible reference steps; downloaded artifacts verify the run and recipe but do not prove each transfer command was used verbatim. The historical and v3 experiments used a Lightning Studio L4 at `/teamspace/studios/this_studio`; the commands below use that location. A different provider requires an explicitly documented path and image adjustment, not a silent change to the recipe. A VM with SSH can use `scp`; Lightning's file upload interface can place the same archives in the VM root instead.
 
 ### B1. Supply operator-specific values and transfer inputs
 
@@ -310,13 +310,14 @@ The training requirements file moves with the trainer. The cloud image must alre
 cd "$CA1_VM_REPO"
 python3 -c 'import torch; print(torch.__version__, torch.version.cuda)'
 python3 -m pip install -r research/extraction/training/requirements-training.txt
+python3 -m pip install 'wandb==0.30.0'
 python3 -c 'import torch; print(torch.__version__, torch.version.cuda)'
 python3 -m pip freeze > "$CA1_VM_ROOT/ca1-packages-v3.txt"
 python3 -c 'from huggingface_hub import snapshot_download; snapshot_download("Qwen/Qwen3-4B-Instruct-2507", revision="cdbee75f17c01a7cc42f958dc650907174af0554")'
 python3 -m research.extraction.training.train_ca1 check --packet "$CA1_PACKET"
 ```
 
-The current historical requirements pin Transformers 5.16.1, tokenizers 0.23.2, PEFT 0.21.0, Accelerate 1.15.0, bitsandbytes 0.50.2, and jsonschema 4.25.1. Confirm the moved requirements retain the intended pins. The `check` stage must re-verify payload integrity and `acceptance.json` after transfer, then report 320/64 cases and the verified maximum token length before any GPU preflight. It must not need the old packet, evidence file, or historical generator paths.
+The training requirements pin Transformers 5.16.1, tokenizers 0.23.2, PEFT 0.21.0, Accelerate 1.15.0, bitsandbytes 0.50.2, and jsonschema 4.25.1. W&B 0.30.0 is installed separately because the completed run chose W&B logging. Confirm the moved requirements retain the intended pins. The `check` stage must re-verify payload integrity and `acceptance.json` after transfer, then report 320/64 cases and the verified maximum token length before any GPU preflight. It must not need the old packet, evidence file, or historical generator paths.
 
 ### B4. Preflight and train
 
@@ -326,17 +327,20 @@ Preflight is one forward/backward pass on the longest accepted example; it does 
 
 ```sh
 cd "$CA1_VM_REPO"
+test -n "${WANDB_API_KEY:-}"
+export WANDB_ENTITY='gu-fuku-ro-'
+export WANDB_PROJECT='ca1-pilot-v3'
 python3 -m research.extraction.training.train_ca1 preflight --packet "$CA1_PACKET" \
   2>&1 | tee "$CA1_VM_ROOT/ca1-preflight-v3.log"
 
 python3 -m research.extraction.training.train_ca1 train \
   --packet "$CA1_PACKET" \
   --output "$CA1_RUN" \
-  --report-to none \
+  --report-to wandb \
   2>&1 | tee "$CA1_VM_ROOT/ca1-train-v3.log"
 ```
 
-The historical run logged to W&B; `--report-to none` changes logging, not the model-facing recipe. If W&B is required for the new run, install its pinned version, configure the API key as a VM secret, use `--report-to wandb`, and record that choice. Do not put secrets in commands, logs, or archives.
+The completed v3 run used `--report-to wandb`, W&B 0.30.0, and project `ca1-pilot-v3`; its [W&B record](https://wandb.ai/gu-fuku-ro-/ca1-pilot-v3/runs/qra140m7) is linked in the [training guide](training/training.md). For reproduction, install the pinned W&B version, set the project and entity as shown, and provide the API key through a VM secret. That logging choice does not change the model-facing recipe. Do not put secrets in commands, logs, or archives.
 
 If interrupted, preserve the entire output directory and resume only from its latest **complete** checkpoint under the same directory, on the same GPU and package versions:
 
@@ -345,7 +349,7 @@ python3 -m research.extraction.training.train_ca1 train \
   --packet "$CA1_PACKET" \
   --output "$CA1_RUN" \
   --resume "$CA1_RUN/checkpoint-N" \
-  --report-to none \
+  --report-to wandb \
   2>&1 | tee -a "$CA1_VM_ROOT/ca1-train-v3.log"
 ```
 
@@ -371,11 +375,11 @@ sha256sum "$CA1_VM_ROOT/ca1-selected-adapter-v3.tar.gz" \
   "$CA1_RUN/$CA1_BEST/adapter_model.safetensors"
 ```
 
-Preserve `run.json`, the complete run/checkpoint directory (including optimizer, scheduler, and RNG state if resumption may be needed), selected-adapter archive, preflight and training logs, package list, source commit, packet digest, GPU/CUDA metadata, and archive hashes. The selected-adapter archive alone supports inference, not optimizer-state resumption. Transfer these artifacts back to private `data/` after verifying digests.
+Preserve `run.json`, the complete run/checkpoint directory (including optimizer, scheduler, and RNG state if resumption may be needed), selected-adapter archive, preflight and training logs, package list, source commit, packet digest, GPU/CUDA metadata, and archive hashes. The selected-adapter archive alone supports inference, not optimizer-state resumption. The downloaded v3 selected-adapter archive has SHA-256 `2ba47d57c91c8f9dfd93ea414af4ae335d250e6116373ce41f4a13fc270b7924` and contains completed `run.json` plus `checkpoint-40` adapter files. The preflight and training logs and package list were also downloaded. Full optimizer/checkpoint history, separate `nvidia-smi.txt` and `source_commit.txt` sidecars, and VM-side checksum records were not supplied; retrieve them if full resume or independent transfer provenance is required.
 
 ## C. Manual evaluation after cloud training
 
-**Do not execute any command in Section C during the refactor implementation session.** Run it only after the later manual cloud training has produced a selected adapter and completed run record. These are planned commands for the same cloud VM and pinned source. No model-dependent evaluation was run while writing this guide.
+Section C was performed manually after the completed v3 run selected `checkpoint-40`. The three downloaded evaluation archives and logs were reviewed offline against the accepted packet and selected adapter. The commands below remain the reproducible procedure for the same cloud VM and pinned source.
 
 ### C1. Supply real evaluation inputs and verify membership
 
@@ -466,7 +470,7 @@ PYTHON
 done
 ```
 
-Verify 64, 13, and 11 printed cases respectively. The snippet uses the refactored saved-case fields, role selector, and `summarize` contract; it verifies each saved case and recomputes the aggregate without loading model weights. Its cloud execution remains pending. Copy archives and logs to private `data/` and verify digests after download.
+Verify 64, 13, and 11 printed cases respectively. The snippet uses the refactored saved-case fields, role selector, and `summarize` contract; it verifies each saved case and recomputes the aggregate without loading model weights. The downloaded archives passed this offline check for all 64, 13, and 11 cases, respectively; every saved score and aggregate was recomputed, and all 176 responses reached EOS. Archive digests and case-level findings are in [current evaluation](evaluation/evaluations.md). Keep archives and logs in private `data/` and verify digests after transfer.
 
 ### C4. Compare with the recorded baseline
 
@@ -480,8 +484,8 @@ Compare the new **base and adapted** arms separately, then compare the adapter's
 
 Also compare schema-valid reports, exact dates, actual versus expected row counts, ordered matches, strict passes, full JSON equality, warning status, EOS completion, token budgets, and individual regressions. Use [historical evaluations](evaluation/historical_evaluations.md), [known issues](known_issues.md), and the private per-report review for the prior case-level errors; compare the same categories on the new outputs.
 
-A refactored dataset with exact model-facing parity need not produce numerically identical training metrics: rerunning optimization can still vary. Record packet, source, hardware, package, recipe, selected checkpoint, and decoding differences before interpreting score changes. Keep historical results unchanged and publish the new result as a separate run. A reserved-set rerun cannot establish a fresh final accuracy claim.
+A refactored dataset with exact model-facing parity need not produce numerically identical training metrics: rerunning optimization can still vary. Record packet, source, hardware, package, recipe, selected checkpoint, and decoding differences before interpreting score changes. The completed v3 comparison, including case-level regressions, is recorded separately in [current evaluations](evaluation/evaluations.md); historical results remain unchanged. A reserved-set rerun cannot establish a fresh final accuracy claim.
 
 ## Final implementation-session closeout
 
-The local packet, acceptance, typing, archive digests, and role-only evaluation bundle are complete. Section A and offline CLI checks passed; the Section C3 saved-output check was reviewed against the implemented contract without model loading. VM repository access, image, and transfer details remain operator-supplied. Sections B and C become verified only after later manual cloud training and adapter-dependent evaluation, with their commands, logs, and artifacts checked. Record new results in [evaluations](evaluation/evaluations.md), update [known issues](known_issues.md) and [next steps](next_steps.md) from evidence, and keep [research status](../README.md) current.
+The local packet gates and manual cloud run are complete. Downloaded B/C artifacts passed offline provenance, saved-case, and aggregate checks without rerunning a model. The new adapter has material case-level regressions alongside pooled real gains; [current evaluation](evaluation/evaluations.md), [known issues](known_issues.md), [next steps](next_steps.md), and [research status](../README.md) record the evidence and limits. The exact VM transfer sequence and missing full checkpoint/GPU/checksum sidecars remain unverified.
