@@ -111,7 +111,7 @@ def preflight(rows, tokenizer):
 
 def train(args, splits, tokenizer):
     import torch
-    from transformers import Trainer, TrainingArguments
+    from transformers import Trainer, TrainingArguments, set_seed
 
     dtype = cuda_dtype()
     output = args.output
@@ -173,6 +173,7 @@ def train(args, splits, tokenizer):
     run_file.write_text(json.dumps(info, indent=2) + "\n")
     started = time.monotonic()
     try:
+        set_seed(recipe["seed"])
         model = load_model(dtype)
         settings = TrainingArguments(
             output_dir=str(output),

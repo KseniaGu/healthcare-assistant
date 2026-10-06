@@ -1,8 +1,10 @@
 """Offline trainer checks without private packets, CUDA, or model weights."""
 
 import sys
+from types import SimpleNamespace
 
 import pytest
+import torch
 
 from research.extraction.datasets import packet
 from research.extraction.tests.test_ca1_packet import fixture_packet
@@ -37,3 +39,44 @@ def test_check_accepts_self_contained_packet(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["train_ca1", "check", "--packet", str(root)])
     train_ca1.main()
     assert "1 train, 1 validation" in capsys.readouterr().out
+
+
+def test_train_seeds_before_creating_adapter(tmp_path, monkeypatch):
+    class ModelReached(Exception):
+        pass
+
+    packet_dir = tmp_path / "packet"
+    packet_dir.mkdir()
+    (packet_dir / "SHA256SUMS.json").write_text("{}\n")
+    packet.dump(packet_dir / "manifest.json", {"source_commit": "a" * 40})
+    monkeypatch.setattr(train_ca1, "current_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(train_ca1, "cuda_dtype", lambda: torch.bfloat16)
+    version = train_ca1.importlib.metadata.version
+
+    def installed_version(name):
+        try:
+            return version(name)
+        except train_ca1.importlib.metadata.PackageNotFoundError:
+            return "0.0.0"
+
+    monkeypatch.setattr(train_ca1.importlib.metadata, "version", installed_version)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda index: "test GPU")
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda index: (8, 9))
+    monkeypatch.setattr(torch.cuda, "get_device_properties", lambda index: SimpleNamespace(total_memory=16 * 2**30))
+    monkeypatch.setattr(torch.cuda, "max_memory_allocated", lambda: 0)
+    initial_seeds = []
+
+    def observe_model(dtype):
+        initial_seeds.append(torch.initial_seed())
+        raise ModelReached
+
+    monkeypatch.setattr(train_ca1, "load_model", observe_model)
+    args = SimpleNamespace(packet=packet_dir, output=tmp_path / "run", resume=None, report_to="none")
+    previous_state = torch.random.get_rng_state()
+    try:
+        torch.manual_seed(7)
+        with pytest.raises(ModelReached):
+            train_ca1.train(args, {}, None)
+    finally:
+        torch.random.set_rng_state(previous_state)
+    assert initial_seeds == [42]
