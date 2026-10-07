@@ -1,8 +1,12 @@
 """Fictitious checks for the revised CA1 document layouts."""
 
+import json
 import random
 
-from research.extraction.datasets import synthetic_reports as reports
+import pytest
+
+from research.extraction.datasets import packet
+from research.extraction.datasets.synthetic import reports
 
 SCHEMA = {"type": "object", "required": ["date", "results", "errors"]}
 
@@ -21,6 +25,19 @@ def test_catalog_uses_only_eligible_layout_evidence():
     assert all(set(group["development_sources"]) <= reports.ELIGIBLE for group in groups)
     assert all(not group["development_sources"] for group in groups if group["split"] == "validation")
     assert len({group["family"] for group in groups}) == 32
+
+
+@pytest.mark.parametrize("style", [-1, 14, 20, 2.5, "6", True])
+def test_invalid_report_style_is_rejected(style):
+    group = family(style=style)
+    with pytest.raises(ValueError, match="report style"):
+        reports.panel_for(group)
+    with pytest.raises(ValueError, match="report style"):
+        reports.render_report_header(group, 0, [])
+    with pytest.raises(ValueError, match="report style"):
+        reports.row_line(row(), style, 1, 0)
+    with pytest.raises(ValueError, match="report style"):
+        reports.footer(group, 0)
 
 
 def test_qualitative_scenarios_use_related_assays_and_no_lettered_markers():
@@ -42,13 +59,15 @@ def test_qualitative_scenarios_use_related_assays_and_no_lettered_markers():
 
 
 def test_visible_cells_survive_wrapping_and_missing_values():
-    rows = [row(name="Длинное название лабораторного показателя глюкозы"),
-            row(name="Креатинин", value="—", unit="мкмоль/л", reference_range="45–101"),
-            row(name="—", value="7,20")]
+    rows = [
+        row(name="Длинное название лабораторного показателя глюкозы"),
+        row(name="Креатинин", value="—", unit="мкмоль/л", reference_range="45–101"),
+        row(name="—", value="7,20"),
+    ]
     dates = ["Дата печати: 04.01.2024", "Дата направления: 01.01.2024"]
     text, spans = reports.render(family("chemistry", 0), 0, rows, dates)
-    target, evidence = reports.target_from_visible(text, rows, spans, dates)
-    reports.check_pair(text, rows, spans, target, evidence, SCHEMA)
+    target, evidence = reports.target_from_visible(rows, spans, dates)
+    reports.check_pair(text, rows, target, evidence, SCHEMA)
     assert target["date"] == "2024-01-01"
     assert len(target["results"]) == 2
     assert target["results"][1]["value"] is None
@@ -59,12 +78,14 @@ def test_visible_cells_survive_wrapping_and_missing_values():
 
 
 def test_paired_columns_keep_both_observations():
-    rows = [row(name="Нейтрофилы, %", value="45,0", unit="%", reference_range="40–70"),
-            row(name="Нейтрофилы, абс.", value="2,51", unit="10^9/л", reference_range="1,5–7,5")]
+    rows = [
+        row(name="Нейтрофилы, %", value="45,0", unit="%", reference_range="40–70"),
+        row(name="Нейтрофилы, абс.", value="2,51", unit="10^9/л", reference_range="1,5–7,5"),
+    ]
     dates = ["Дата печати: 04.01.2024", "Дата взятия образца: 02.01.2024"]
     text, spans = reports.render(family("hematology", 7), 1, rows, dates)
-    target, evidence = reports.target_from_visible(text, rows, spans, dates)
-    reports.check_pair(text, rows, spans, target, evidence, SCHEMA)
+    target, evidence = reports.target_from_visible(rows, spans, dates)
+    reports.check_pair(text, rows, target, evidence, SCHEMA)
     assert "       |       " in text
     assert [result["value"] for result in target["results"]] == ["45,0", "2,51"]
 
@@ -83,3 +104,22 @@ def test_distribution_profile_counts_layout_artifacts():
     assert result["count"] == 2
     assert (result["with_image"], result["with_person"], result["with_website"]) == (1, 1, 1)
     assert result["unique_openings"] == 2
+
+
+def test_seeded_cases_keep_exact_rendered_targets_and_evidence():
+    families = reports.catalog()
+    rng = random.Random(reports.SEED)
+    output = []
+    for family, variant, bucket in (
+        (families[0], 0, "ordinary"),
+        (families[7], 1, "layout"),
+        (families[-1], 2, "difficult"),
+    ):
+        rows, changes = reports.rows_for(family, variant, rng, bucket, False)
+        dates, tag = reports.dates_for(family, variant, bucket)
+        text, spans = reports.render(family, variant, rows, dates)
+        target, evidence = reports.target_from_visible(rows, spans, dates)
+        output.append([family["family"], text, target, changes, tag, evidence])
+    assert packet.sha(json.dumps(output, ensure_ascii=False, sort_keys=True)) == (
+        "500d7355dbd830e08f89acc8169f0cea1423ba3dfe6a00ccbd97533c72857b94"
+    )

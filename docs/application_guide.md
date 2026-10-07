@@ -114,5 +114,4 @@ Experimental runners, commands and environment requirements are documented in
 explains the current findings and next steps. Local image preparation has its own
 [standalone tool](../research/image_redaction/README.md).
 
-Earlier Ollama and host diagnostics are historical experiments; their details and exhausted budgets are recorded in [historical evaluations](../research/extraction/evaluation/historical_evaluations.md). The maintained CA1 checks run offline locally; the v3 cloud training and adapter evaluation were completed manually, with results in [current evaluations](../research/extraction/evaluation/evaluations.md). Private experiment artifacts stay in `data/`.
-are exhausted; consult the research protocol before any new requests.
+The CA1 packet checks run offline locally. The accepted cloud training and matched adapter evaluations are documented in [evaluations](../research/extraction/evaluation/evaluations.md). Private experiment artifacts stay in `data/`. Consult the research protocol before any new provider requests.

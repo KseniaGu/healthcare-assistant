@@ -51,6 +51,7 @@ asyncio_default_fixture_loop_scope = "session"
 [tool.mypy]
 python_version = "3.11"
 check_untyped_defs = true
+disallow_untyped_defs = true
 ignore_missing_imports = true
 files = ["research/extraction/datasets", "research/extraction/training", "research/extraction/evaluation"]
 

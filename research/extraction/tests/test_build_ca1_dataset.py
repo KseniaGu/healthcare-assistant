@@ -4,7 +4,7 @@ import pytest
 
 from research.extraction.datasets import build_ca1_dataset as builder
 from research.extraction.datasets import packet
-from research.extraction.datasets.synthetic_reports import ELIGIBLE
+from research.extraction.datasets.synthetic.reports import ELIGIBLE
 
 
 def source_fixture(tmp_path, monkeypatch):
@@ -12,9 +12,17 @@ def source_fixture(tmp_path, monkeypatch):
     smoke = tmp_path / "smoke"
     tokenizer = smoke / "tokenizer"
     tokenizer.mkdir(parents=True)
-    names = ["prompts/corrected.txt", "schema.json", "synthetic_specs.json",
-             "synthetic/corrected/train.jsonl", "synthetic/corrected/validation.jsonl",
-             "real_edits.json", "verification.json", "synthetic_review.md", "policy.md"]
+    names = [
+        "prompts/corrected.txt",
+        "schema.json",
+        "synthetic_specs.json",
+        "synthetic/corrected/train.jsonl",
+        "synthetic/corrected/validation.jsonl",
+        "real_edits.json",
+        "verification.json",
+        "synthetic_review.md",
+        "policy.md",
+    ]
     names.extend(f"real/{identifier}/input.txt" for identifier in ELIGIBLE)
     for name in names:
         path = correction / name
@@ -49,3 +57,28 @@ def test_changed_or_unreviewed_source_rejected(tmp_path, monkeypatch):
     packet.dump(correction / "SHA256SUMS.json", checksums)
     with pytest.raises(ValueError, match="review"):
         builder.source_hashes_for(correction, source_index, tokenizer)
+
+
+def test_build_does_not_accept_source_revision_override(tmp_path):
+    with pytest.raises(TypeError, match="source_commit"):
+        builder.build(
+            tmp_path / "packet", tmp_path / "source", tmp_path / "index", tmp_path / "tokenizer", source_commit="fake"
+        )
+
+
+def test_source_revision_tracks_every_synthetic_module(monkeypatch):
+    checked = []
+
+    def output(command, **kwargs):
+        return "a" * 40 if command[-1] == "HEAD" else ""
+
+    monkeypatch.setattr(builder.subprocess, "check_output", output)
+    monkeypatch.setattr(builder.subprocess, "check_call", lambda command, **kwargs: checked.append(command[-1]))
+
+    assert builder.source_revision() == "a" * 40
+    assert {
+        "research/extraction/datasets/synthetic/__init__.py",
+        "research/extraction/datasets/synthetic/reports.py",
+        "research/extraction/datasets/synthetic/layouts.py",
+        "research/extraction/datasets/synthetic/types.py",
+    } <= set(checked)

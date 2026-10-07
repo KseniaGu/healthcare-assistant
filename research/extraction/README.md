@@ -1,12 +1,11 @@
 # CA1 extraction research
 
-The maintained research pipeline builds a self-contained fictitious CA1 packet, trains from an accepted packet, and evaluates a selected adapter against synthetic and separately supplied real reports. It does not change the production Gemini extraction path.
+The research pipeline builds a self-contained fictitious CA1 packet, trains from an accepted packet, and evaluates a selected adapter against synthetic and separately supplied real reports. The adapter is research-only; the production Gemini extraction path is separate.
 
-- [Reproduction procedure](reproduction.md): local dataset and packet checks, plus the completed manual cloud training and matched evaluation procedure.
-- [Dataset contract and historical audit](datasets/dataset.md): source roles, visible-cell rules, construction, and the failed v1 distribution check.
+- [Reproduction procedure](reproduction.md): local packet checks and manual cloud training and evaluation steps.
+- [Dataset contract](datasets/dataset.md): source roles, visible-cell rules, generation, and validation.
 - [Training recipe](training/training.md): model, optimizer, environment, and run records.
-- [Current evaluation method](evaluation/evaluations.md) and [historical results](evaluation/historical_evaluations.md).
-- [Known issues](known_issues.md) and [future work](next_steps.md).
-- [Migration specification](implementation_plan.md): stage gates and preserved invariants.
+- [Evaluation method and results](evaluation/evaluations.md).
+- [Known issues](known_issues.md) and [next steps](next_steps.md).
 
-Private reports, source reviews, packets, and model artifacts remain under gitignored `data/`. The previously accepted `sft-pilot-v2` packet and its run are historical evidence. The `ca1-sft-v3` packet passed model-facing parity and was accepted through a separate `acceptance.json` record. Its SHA256SUMS content digest is `20d31cda44e955c60963b3da0f61add86cd20648e1041b69653d798a28af255f`. Manual L4 training and three matched evaluations completed on 2026-10-05; [current results](evaluation/evaluations.md) include material case regressions.
+The accepted `ca1-sft-v3` packet has SHA256SUMS content digest `20d31cda44e955c60963b3da0f61add86cd20648e1041b69653d798a28af255f`. It passed packet integrity and offline acceptance checks. Manual L4 training selected `checkpoint-40`; three matched base/adapter evaluations are complete. Private reports, source reviews, packets, and model artifacts remain under gitignored `data/`. A future run requires a candidate built from clean committed source and its own acceptance evidence.

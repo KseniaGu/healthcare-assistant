@@ -24,42 +24,75 @@ class FakeTokenizer:
 
 
 def fixture_packet(tmp_path, monkeypatch):
+    """Builds a small sealed packet whose acceptance can be varied by each test."""
     monkeypatch.setattr(packet, "COUNTS", {"train": 1, "validation": 1})
     provenance = {"model": packet.MODEL, "revision": packet.REVISION, "files": {}, "chat_template_sha256": "0" * 64}
     monkeypatch.setattr(packet, "tokenizer_and_hashes", lambda path: (FakeTokenizer(), provenance))
+
     root = tmp_path / "packet"
     (root / "tokenizer").mkdir(parents=True)
     packet.dump(root / "tokenizer/provenance.json", provenance)
     prompt = "Fictitious extraction prompt"
     (root / "prompt.txt").write_text(prompt)
-    schema = {"type": "object", "required": ["date", "results", "errors"], "properties": {
-        "date": {"type": "null"}, "results": {"type": "array"}, "errors": {"type": "array"}}}
+    schema = {
+        "type": "object",
+        "required": ["date", "results", "errors"],
+        "properties": {"date": {"type": "null"}, "results": {"type": "array"}, "errors": {"type": "array"}},
+    }
     packet.dump(root / "schema.json", schema)
+
     target = json.dumps({"date": None, "results": [], "errors": []})
     examples = []
     tokens = []
     for split in ("train", "validation"):
         identifier = f"{split}-fiction"
         text = f"Fictitious {split} report"
-        messages = [{"role": "system", "content": prompt},
-                    {"role": "user", "content": packet.WRAPPER_START + text + packet.WRAPPER_END},
-                    {"role": "assistant", "content": target}]
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": packet.WRAPPER_START + text + packet.WRAPPER_END},
+            {"role": "assistant", "content": target},
+        ]
         ids, labels, _, _ = packet.tokenize(FakeTokenizer(), messages)
         (root / f"{split}.jsonl").write_text(json.dumps({"id": identifier, "messages": messages}) + "\n")
-        examples.append({"id": identifier, "split": split, "family": split,
-                         "input_sha256": packet.sha(text), "target_sha256": packet.sha(target)})
+        examples.append(
+            {
+                "id": identifier,
+                "split": split,
+                "family": split,
+                "input_sha256": packet.sha(text),
+                "target_sha256": packet.sha(target),
+            }
+        )
         tokens.append({"id": identifier, "split": split, "input_ids": ids, "labels": labels})
+
     (root / "tokenized.jsonl").write_text("".join(json.dumps(row) + "\n" for row in tokens))
-    packet.dump(root / "manifest.json", {"model": packet.MODEL, "revision": packet.REVISION,
-        "source_commit": "a" * 40, "prompt_sha256": packet.sha(root / "prompt.txt"),
-        "schema_sha256": packet.sha(root / "schema.json"), "tokenizer_provenance": provenance,
-        "examples": examples})
+    packet.dump(
+        root / "manifest.json",
+        {
+            "model": packet.MODEL,
+            "revision": packet.REVISION,
+            "source_commit": "a" * 40,
+            "prompt_sha256": packet.sha(root / "prompt.txt"),
+            "schema_sha256": packet.sha(root / "schema.json"),
+            "tokenizer_provenance": provenance,
+            "examples": examples,
+        },
+    )
     content_sha256 = packet.write_checksums(root)
+
     evidence = tmp_path / "evidence.json"
     reference = "b" * 64
-    packet.dump(evidence, {"basis": "model_facing_parity", "result": "pass",
-        "content_sha256": content_sha256, "previous_packet_sha256": reference,
-        "example_count": 2, "compared": ["all model-facing fields"]})
+    packet.dump(
+        evidence,
+        {
+            "basis": "model_facing_parity",
+            "result": "pass",
+            "content_sha256": content_sha256,
+            "previous_packet_sha256": reference,
+            "example_count": 2,
+            "compared": ["all model-facing fields"],
+        },
+    )
     return root, evidence, reference
 
 
@@ -144,13 +177,16 @@ def reseal_and_accept(root, evidence, reference):
     packet.accept(root, "model_facing_parity", evidence, reference)
 
 
-@pytest.mark.parametrize("change,problem", [
-    ("duplicate", "Duplicate or unknown report ID"),
-    ("family", "family isolation"),
-    ("prompt", "prompt or schema"),
-    ("schema", "prompt or schema"),
-    ("labels", "boundary"),
-])
+@pytest.mark.parametrize(
+    "change,problem",
+    [
+        ("duplicate", "Duplicate or unknown report ID"),
+        ("family", "family isolation"),
+        ("prompt", "prompt or schema"),
+        ("schema", "prompt or schema"),
+        ("labels", "boundary"),
+    ],
+)
 def test_loader_rejects_invalid_resealed_content(tmp_path, monkeypatch, change, problem):
     root, evidence, reference = fixture_packet(tmp_path, monkeypatch)
     if change == "duplicate":
@@ -186,10 +222,16 @@ def test_loader_rejects_tokenizer_drift(tmp_path, monkeypatch):
 
 def test_reviewed_changes_requires_each_case_review(tmp_path, monkeypatch):
     root, evidence, _ = fixture_packet(tmp_path, monkeypatch)
-    packet.dump(evidence, {"basis": "reviewed_changes", "result": "pass",
-        "content_sha256": packet.sha(root / "SHA256SUMS.json"),
-        "changed_examples": ["train-fiction", "validation-fiction"],
-        "reviews": {"train-fiction": "reviewed"}})
+    packet.dump(
+        evidence,
+        {
+            "basis": "reviewed_changes",
+            "result": "pass",
+            "content_sha256": packet.sha(root / "SHA256SUMS.json"),
+            "changed_examples": ["train-fiction", "validation-fiction"],
+            "reviews": {"train-fiction": "reviewed"},
+        },
+    )
     with pytest.raises(ValueError, match="incomplete"):
         packet.accept(root, "reviewed_changes", evidence)
 
